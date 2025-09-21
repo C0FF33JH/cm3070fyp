@@ -11,10 +11,16 @@ from .forecasting_service import (
     ChronosForecastingService,
     get_forecasting_service
 )
+from .fraud_service import (
+    XGBoostFraudService,
+    get_fraud_service
+)
 
 __all__ = [
     'SetFitCategorizationService',
     'get_categorization_service',
     'ChronosForecastingService',
     'get_forecasting_service',
+    'XGBoostFraudService',
+    'get_fraud_service',
 ]

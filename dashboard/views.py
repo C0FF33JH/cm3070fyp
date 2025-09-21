@@ -3,7 +3,7 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.contrib.auth.models import User
 from dashboard.models import Transaction, Account
-from dashboard.ml_services import get_categorization_service, get_forecasting_service
+from dashboard.ml_services import get_categorization_service, get_forecasting_service, get_fraud_service
 import json
 
 def dashboard_view(request):
@@ -100,5 +100,31 @@ def forecast_cashflow(request):
     # Add spending patterns if requested
     if request.GET.get('include_patterns') == 'true':
         result['spending_patterns'] = service.get_spending_patterns(account.id)
+    
+    return JsonResponse(result)
+
+def detect_fraud(request):
+    """API endpoint for fraud detection"""
+    # Check which user type to analyze
+    user_type = request.GET.get('user', 'fraud_analyst')
+    
+    if user_type == 'demo_user':
+        # Statistical anomaly detection for Plaid data
+        user = User.objects.get(username='demo_user')
+        account = user.accounts.first()
+        
+        if not account:
+            return JsonResponse({'error': 'No account found'}, status=404)
+        
+        sensitivity = float(request.GET.get('sensitivity', 2.0))
+        service = get_fraud_service()
+        result = service.detect_anomalies_plaid(account.id, sensitivity)
+        
+    else:
+        # XGBoost fraud detection for Kaggle data
+        user = User.objects.get(username='fraud_analyst')
+        
+        service = get_fraud_service()
+        result = service.analyze_batch()
     
     return JsonResponse(result)
