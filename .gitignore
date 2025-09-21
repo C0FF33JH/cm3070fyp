@@ -39,3 +39,4 @@ media/
 
 # ignore data files
 data/
+models/
