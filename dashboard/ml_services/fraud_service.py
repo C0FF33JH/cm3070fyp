@@ -417,6 +417,10 @@ class XGBoostFraudService:
             )
             
             if stats['avg_amount'] is not None:
+                # Convert Decimal to float for calculations
+                stats['avg_amount'] = float(stats['avg_amount'])
+                if stats['std_amount']:
+                    stats['std_amount'] = float(stats['std_amount'])
                 category_stats[cat_code] = stats
         
         # Find anomalies

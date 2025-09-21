@@ -165,24 +165,32 @@ Then provide a helpful response with insights."""
     def _extract_tools_from_response(self, claude_text: str, user_query: str) -> List[str]:
         """
         Extract which tools to run based on Claude's analysis or keywords
+        More specific routing logic
         """
         tools = []
         query_lower = user_query.lower()
         
-        # Check for categorization intent
-        if any(word in query_lower for word in ['categorize', 'category', 'categories', 'spending breakdown']):
+        # Check for categorization intent - must be explicit
+        if any(word in query_lower for word in ['categorize', 'category', 'categories', 'breakdown by category', 'spending by category']):
             tools.append('categorize')
         
         # Check for forecasting intent
-        if any(word in query_lower for word in ['forecast', 'predict', 'future', 'will i', 'next week', 'next month', 'balance in']):
+        if any(word in query_lower for word in ['forecast', 'predict', 'future', 'will i', 'next week', 'next month', 'balance in', 'enough money']):
             tools.append('forecast')
         
         # Check for fraud/anomaly intent
-        if any(word in query_lower for word in ['fraud', 'suspicious', 'unusual', 'anomaly', 'weird', 'strange']):
+        if any(word in query_lower for word in ['fraud', 'suspicious', 'unusual', 'anomaly', 'anomalous', 'weird', 'strange']):
             tools.append('fraud')
         
-        # Check for summary/overview intent
-        if any(word in query_lower for word in ['summary', 'overview', 'spending', 'how much', 'analysis', 'insights']):
+        # Check for spending analysis intent
+        if any(phrase in query_lower for phrase in ['how much did i spend', 'spending on', 'spent on', 'spending pattern', 'analyze my spending']):
+            tools.append('summary')
+            # Also add categorization for spending questions
+            if any(word in query_lower for word in ['food', 'transport', 'entertainment', 'medical']):
+                tools.append('categorize')
+        
+        # Check for balance/overview intent
+        if any(word in query_lower for word in ['balance', 'overview', 'summary']) and len(tools) == 0:
             tools.append('summary')
         
         # Default to overview if no specific intent
@@ -396,6 +404,15 @@ Then provide a helpful response with insights."""
             insights.append(
                 f"💳 Last 30 days: ${summary['last_30_days']['total_spent']:,.2f} spent"
             )
+            
+            # Add category-specific spending if asked about specific category
+            query_lower = user_query.lower()
+            for cat in summary.get('top_categories', []):
+                cat_name = cat['category'].lower().replace('_', ' ')
+                if cat_name in query_lower or cat['category'].lower() in query_lower:
+                    insights.append(
+                        f"🍔 {cat['category'].replace('_', ' ').title()}: ${cat['amount']:,.2f} ({cat['count']} transactions)"
+                    )
         
         # Build response
         response = {
@@ -437,11 +454,14 @@ Then provide a helpful response with insights."""
         if 'categorization' in results:
             cat_data = results['categorization']
             if cat_data.get('categories'):
-                top_cat = cat_data['categories'][0]
-                response_parts.append(
-                    f"Your highest spending category is {top_cat['ai_category'].replace('_', ' ').title()} "
-                    f"with ${abs(top_cat['total_amount']):,.2f} spent. "
-                )
+                # Find actual spending categories (negative amounts)
+                spending_cats = [c for c in cat_data['categories'] if c.get('total_amount', 0) < 0]
+                if spending_cats:
+                    top_cat = spending_cats[0]
+                    response_parts.append(
+                        f"Your highest spending category is {top_cat['ai_category'].replace('_', ' ').title()} "
+                        f"with ${abs(top_cat['total_amount']):,.2f} spent. "
+                    )
         
         if 'fraud' in results:
             if results['fraud'].get('anomalies_found', 0) > 0:
