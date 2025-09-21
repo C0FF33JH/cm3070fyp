@@ -14,4 +14,7 @@ urlpatterns = [
     path('api/category-stats/', views.category_stats_api, name='category_stats'),
     path('api/forecast/', views.forecast_cashflow, name='forecast'),
     path('api/fraud/', views.detect_fraud, name='fraud'),
+    path('chat/', views.chat_interface, name='chat'),
+    path('api/chat/', views.process_chat, name='process_chat'),
+    path('api/comprehensive/', views.comprehensive_analysis, name='comprehensive'),
 ]

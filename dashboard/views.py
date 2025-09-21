@@ -1,8 +1,10 @@
 from django.shortcuts import render, redirect
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
+from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.models import User
-from dashboard.models import Transaction, Account
+from django.utils import timezone
+from dashboard.models import Transaction, Account, ChatMessage, AnalysisResult
 from dashboard.ml_services import get_categorization_service, get_forecasting_service, get_fraud_service
 import json
 
@@ -128,3 +130,162 @@ def detect_fraud(request):
         result = service.analyze_batch()
     
     return JsonResponse(result)
+
+"""
+Chat Interface Views
+"""
+
+def chat_interface(request):
+    """Main chat interface view"""
+    user = User.objects.get(username='demo_user')
+    account = user.accounts.first()
+    
+    if not account:
+        return render(request, 'dashboard/no_account.html')
+    
+    # Get recent chat messages
+    recent_messages = ChatMessage.objects.filter(
+        user=user
+    ).order_by('-created_at')[:10]
+    
+    context = {
+        'account': account,
+        'recent_messages': recent_messages,
+    }
+    
+    return render(request, 'dashboard/chat.html', context)
+
+@require_http_methods(["POST"])
+def process_chat(request):
+    """Process chat message through orchestration"""
+    from dashboard.ml_services.orchestration_service import get_orchestration_service
+    from dashboard.models import ChatMessage
+    
+    # Get user and account
+    user = User.objects.get(username='demo_user')
+    account = user.accounts.first()
+    
+    if not account:
+        return JsonResponse({'error': 'No account found'}, status=404)
+    
+    # Get message from request
+    try:
+        data = json.loads(request.body)
+        user_message = data.get('message', '').strip()
+    except:
+        user_message = request.POST.get('message', '').strip()
+    
+    if not user_message:
+        return JsonResponse({'error': 'No message provided'}, status=400)
+    
+    # Get orchestration service
+    service = get_orchestration_service()
+    
+    # Process the query
+    response = service.process_query(
+        user_query=user_message,
+        account_id=account.id,
+        context={
+            'user_id': user.id,
+            'timestamp': timezone.now().isoformat()
+        }
+    )
+    
+    # Save to chat history
+    ChatMessage.objects.create(
+        user=user,
+        message=user_message,
+        response=response
+    )
+    
+    return JsonResponse(response)
+
+def comprehensive_analysis(request):
+    """Run all ML models for comprehensive analysis"""
+    from dashboard.ml_services import (
+        get_categorization_service,
+        get_forecasting_service,
+        get_fraud_service,
+        get_orchestration_service
+    )
+    
+    # Get user and account
+    user = User.objects.get(username='demo_user')
+    account = user.accounts.first()
+    
+    if not account:
+        return JsonResponse({'error': 'No account found'}, status=404)
+    
+    results = {
+        'account_id': account.id,
+        'account_name': account.account_name,
+        'timestamp': timezone.now().isoformat(),
+        'analyses': {}
+    }
+    
+    # 1. Run categorization
+    try:
+        cat_service = get_categorization_service()
+        cat_stats = cat_service.get_category_statistics(account.id)
+        results['analyses']['categorization'] = {
+            'success': True,
+            'data': cat_stats
+        }
+    except Exception as e:
+        results['analyses']['categorization'] = {
+            'success': False,
+            'error': str(e)
+        }
+    
+    # 2. Run forecasting
+    try:
+        forecast_service = get_forecasting_service()
+        forecast_result = forecast_service.forecast_balance(
+            account.id,
+            horizon=7,
+            history_days=90
+        )
+        results['analyses']['forecast'] = {
+            'success': forecast_result.get('success', False),
+            'data': forecast_result
+        }
+    except Exception as e:
+        results['analyses']['forecast'] = {
+            'success': False,
+            'error': str(e)
+        }
+    
+    # 3. Run anomaly detection
+    try:
+        fraud_service = get_fraud_service()
+        anomalies = fraud_service.detect_anomalies_plaid(
+            account.id,
+            sensitivity=2.0
+        )
+        results['analyses']['anomalies'] = {
+            'success': True,
+            'data': anomalies
+        }
+    except Exception as e:
+        results['analyses']['anomalies'] = {
+            'success': False,
+            'error': str(e)
+        }
+    
+    # 4. Generate insights summary
+    orchestration = get_orchestration_service()
+    summary_response = orchestration.process_query(
+        "Give me a comprehensive analysis of my finances",
+        account.id
+    )
+    results['summary'] = summary_response
+    
+    # Save as analysis result
+    from dashboard.models import AnalysisResult
+    AnalysisResult.objects.create(
+        user=user,
+        analysis_type='comprehensive',
+        result_data=results
+    )
+    
+    return JsonResponse(results)
