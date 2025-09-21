@@ -9,6 +9,7 @@ from typing import List, Dict, Tuple, Optional
 from setfit import SetFitModel
 from django.conf import settings
 import torch
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,27 @@ class SetFitCategorizationService:
     """Service for categorizing transactions using SetFit model"""
     
     # Map model output labels to database categories
+    # If model outputs integers, map them to categories
+    LABEL_TO_CATEGORY = {
+        0: 'FOOD_AND_DRINK',
+        1: 'GENERAL_MERCHANDISE',
+        2: 'TRANSPORTATION',
+        3: 'ENTERTAINMENT',
+        4: 'GENERAL_SERVICES',
+        5: 'MEDICAL',
+        6: 'PERSONAL_CARE',
+        7: 'HOME_IMPROVEMENT',
+        8: 'RENT_AND_UTILITIES',
+        9: 'TRAVEL',
+        10: 'LOAN_PAYMENTS',
+        11: 'GOVERNMENT_AND_NON_PROFIT',
+        12: 'INCOME',
+        13: 'TRANSFER_IN',
+        14: 'TRANSFER_OUT',
+        15: 'BANK_FEES'
+    }
+    
+    # Also support string labels
     CATEGORY_MAP = {
         'FOOD_AND_DRINK': 'FOOD_AND_DRINK',
         'GENERAL_MERCHANDISE': 'GENERAL_MERCHANDISE', 
@@ -91,7 +113,11 @@ class SetFitCategorizationService:
             predicted_label = predictions[0]
             
             # Map to our category enum
-            category = self.CATEGORY_MAP.get(predicted_label, predicted_label)
+            # Handle both integer and string labels
+            if isinstance(predicted_label, (int, np.integer)):
+                category = self.LABEL_TO_CATEGORY.get(predicted_label, f"UNKNOWN_{predicted_label}")
+            else:
+                category = self.CATEGORY_MAP.get(predicted_label, predicted_label)
             
             logger.debug(f"Predicted {category} with confidence {confidence:.2f} for: {text[:50]}...")
             
@@ -136,7 +162,12 @@ class SetFitCategorizationService:
             # Add predictions to transactions
             for i, transaction in enumerate(transactions):
                 predicted_label = predictions[i]
-                category = self.CATEGORY_MAP.get(predicted_label, predicted_label)
+                
+                # Handle both integer and string labels
+                if isinstance(predicted_label, (int, np.integer)):
+                    category = self.LABEL_TO_CATEGORY.get(predicted_label, f"UNKNOWN_{predicted_label}")
+                else:
+                    category = self.CATEGORY_MAP.get(predicted_label, predicted_label)
                 
                 transaction['ai_category'] = category
                 transaction['confidence_score'] = float(confidences[i])
