@@ -1,10 +1,9 @@
-# Create your views here.
 from django.shortcuts import render, redirect
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.contrib.auth.models import User
 from dashboard.models import Transaction, Account
-from dashboard.ml_services import get_categorization_service
+from dashboard.ml_services import get_categorization_service, get_forecasting_service
 import json
 
 def dashboard_view(request):
@@ -72,3 +71,34 @@ def category_stats_api(request):
     stats = service.get_category_statistics(account.id)
     
     return JsonResponse(stats)
+
+def forecast_cashflow(request):
+    """API endpoint for cash flow forecasting"""
+    # Default to demo_user for now
+    user = User.objects.get(username='demo_user')
+    account = user.accounts.first()
+    
+    if not account:
+        return JsonResponse({'error': 'No account found'}, status=404)
+    
+    # Get parameters from request
+    horizon = int(request.GET.get('days', 7))
+    history = int(request.GET.get('history', 90))
+    samples = int(request.GET.get('samples', 20))
+    
+    # Get forecasting service
+    service = get_forecasting_service()
+    
+    # Generate forecast
+    result = service.forecast_balance(
+        account_id=account.id,
+        horizon=horizon,
+        history_days=history,
+        num_samples=samples
+    )
+    
+    # Add spending patterns if requested
+    if request.GET.get('include_patterns') == 'true':
+        result['spending_patterns'] = service.get_spending_patterns(account.id)
+    
+    return JsonResponse(result)
