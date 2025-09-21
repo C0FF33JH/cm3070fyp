@@ -36,3 +36,6 @@ cache/
 
 # ignore all media
 media/
+
+# ignore data files
+data/
