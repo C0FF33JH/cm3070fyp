@@ -1,0 +1,630 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Assistant - AI-Orchestrated Open Banking Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <meta name="csrf-token" content="{{ csrf_token }}">
+    <style>
+        .message-bubble {
+            animation: slideIn 0.3s ease-out;
+        }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .typing-indicator {
+            display: inline-block;
+        }
+        .typing-indicator span {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #9ca3af;
+            margin: 0 2px;
+            animation: typing 1.4s infinite;
+        }
+        .typing-indicator span:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+        .typing-indicator span:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+        @keyframes typing {
+            0%, 60%, 100% {
+                transform: translateY(0);
+                opacity: 0.7;
+            }
+            30% {
+                transform: translateY(-10px);
+                opacity: 1;
+            }
+        }
+        .suggestion-chip {
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+        .suggestion-chip:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
+        }
+        .chat-gradient {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .insight-card {
+            transition: all 0.3s ease;
+        }
+        .insight-card:hover {
+            transform: translateX(4px);
+        }
+        /* Custom scrollbar */
+        .chat-container::-webkit-scrollbar {
+            width: 6px;
+        }
+        .chat-container::-webkit-scrollbar-track {
+            background: #f3f4f6;
+        }
+        .chat-container::-webkit-scrollbar-thumb {
+            background: #d1d5db;
+            border-radius: 3px;
+        }
+        .chat-container::-webkit-scrollbar-thumb:hover {
+            background: #9ca3af;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Header -->
+    <nav class="bg-white shadow-sm border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex items-center space-x-3">
+                    <div class="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg"></div>
+                    <h1 class="text-xl font-semibold text-gray-900">AI-Orchestrated Open Banking Dashboard</h1>
+                    <span class="px-2 py-1 text-xs font-medium bg-purple-100 text-purple-800 rounded-full">Claude Assistant</span>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <span class="text-sm text-gray-500">{{ user.first_name }} {{ user.last_name }}</span>
+                    <span class="text-xs text-gray-400">Balance: ${{ account.balance|floatformat:2 }}</span>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Navigation Tabs -->
+    <div class="bg-white border-b">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <nav class="flex space-x-8" aria-label="Tabs">
+                <a href="{% url 'dashboard:categorization' %}" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                    Categorization
+                </a>
+                <a href="{% url 'dashboard:forecast' %}" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                    Cash Flow Forecast
+                </a>
+                <a href="{% url 'dashboard:fraud' %}" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                    Fraud Detection
+                </a>
+                <a href="#" class="border-indigo-500 text-indigo-600 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                    AI Assistant
+                </a>
+            </nav>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Chat Section (2/3 width) -->
+            <div class="lg:col-span-2">
+                <div class="bg-white rounded-lg shadow" style="height: 600px; display: flex; flex-direction: column;">
+                    <!-- Chat Header -->
+                    <div class="chat-gradient text-white px-6 py-4 rounded-t-lg">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h2 class="text-lg font-semibold">AI Banking Assistant</h2>
+                                <p class="text-xs opacity-90">Powered by Claude AI with specialised ML models</p>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                                <span class="text-xs">Online</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Messages Container -->
+                    <div id="chatMessages" class="flex-1 overflow-y-auto p-4 space-y-4 chat-container">
+                        <!-- Welcome Message -->
+                        <div class="flex items-start space-x-3">
+                            <div class="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold">
+                                AI
+                            </div>
+                            <div class="flex-1">
+                                <div class="bg-gray-100 rounded-lg p-4 message-bubble">
+                                    <p class="text-sm text-gray-800">
+                                        👋 Hello! I'm your AI banking assistant. I can help you with:
+                                    </p>
+                                    <ul class="mt-2 space-y-1 text-sm text-gray-600">
+                                        <li>• Analyzing your spending patterns</li>
+                                        <li>• Forecasting your cash flow</li>
+                                        <li>• Detecting unusual transactions</li>
+                                        <li>• Categorizing transactions</li>
+                                        <li>• Providing financial insights</li>
+                                    </ul>
+                                    <p class="mt-2 text-sm text-gray-800">
+                                        What would you like to know about your finances?
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Typing Indicator (hidden by default) -->
+                    <div id="typingIndicator" class="hidden px-4 pb-2">
+                        <div class="flex items-center space-x-2">
+                            <div class="text-xs text-gray-500">AI is thinking</div>
+                            <div class="typing-indicator">
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Input Section -->
+                    <div class="border-t p-4">
+                        <!-- Suggestion Chips -->
+                        <div id="suggestionChips" class="flex flex-wrap gap-2 mb-3">
+                            <button class="suggestion-chip px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded-full hover:bg-indigo-100 hover:text-indigo-700" onclick="sendSuggestion(this.textContent)">
+                                What's my balance?
+                            </button>
+                            <button class="suggestion-chip px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded-full hover:bg-indigo-100 hover:text-indigo-700" onclick="sendSuggestion(this.textContent)">
+                                Show spending breakdown
+                            </button>
+                            <button class="suggestion-chip px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded-full hover:bg-indigo-100 hover:text-indigo-700" onclick="sendSuggestion(this.textContent)">
+                                Any suspicious transactions?
+                            </button>
+                            <button class="suggestion-chip px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded-full hover:bg-indigo-100 hover:text-indigo-700" onclick="sendSuggestion(this.textContent)">
+                                Forecast next week
+                            </button>
+                        </div>
+                        
+                        <!-- Input Field -->
+                        <div class="flex space-x-2">
+                            <input 
+                                type="text" 
+                                id="chatInput" 
+                                placeholder="Ask me anything about your finances..."
+                                class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                onkeypress="handleKeyPress(event)"
+                            >
+                            <button 
+                                id="sendButton"
+                                onclick="sendMessage()"
+                                class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center space-x-2"
+                            >
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Insights Panel (1/3 width) -->
+            <div class="space-y-4">
+                <!-- Quick Stats -->
+                <div class="bg-white rounded-lg shadow p-4">
+                    <h3 class="text-sm font-semibold text-gray-900 mb-3">Quick Stats</h3>
+                    <div class="space-y-3">
+                        <div class="flex justify-between items-center">
+                            <span class="text-xs text-gray-600">Current Balance</span>
+                            <span class="text-sm font-semibold text-gray-900">${{ account.balance|floatformat:2 }}</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-xs text-gray-600">This Month Spent</span>
+                            <span class="text-sm font-semibold text-red-600" id="monthSpent">-$0.00</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-xs text-gray-600">Categorized</span>
+                            <span class="text-sm font-semibold text-green-600" id="categorizedCount">0</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-xs text-gray-600">Anomalies</span>
+                            <span class="text-sm font-semibold text-yellow-600" id="anomalyCount">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Insights -->
+                <div class="bg-white rounded-lg shadow p-4">
+                    <h3 class="text-sm font-semibold text-gray-900 mb-3">Recent Insights</h3>
+                    <div id="recentInsights" class="space-y-2">
+                        <div class="insight-card flex items-start space-x-2 p-2 rounded hover:bg-gray-50">
+                            <div class="w-1 h-1 bg-indigo-500 rounded-full mt-2"></div>
+                            <p class="text-xs text-gray-600">Ask a question to see insights</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Active Models -->
+                <div class="bg-white rounded-lg shadow p-4">
+                    <h3 class="text-sm font-semibold text-gray-900 mb-3">Active ML Models</h3>
+                    <div class="space-y-2">
+                        <div class="flex items-center space-x-2">
+                            <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+                            <span class="text-xs text-gray-600">SetFit - Categorization</span>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+                            <span class="text-xs text-gray-600">Chronos-T5 - Forecasting</span>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+                            <span class="text-xs text-gray-600">XGBoost - Fraud Detection</span>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <div class="w-2 h-2 bg-purple-500 rounded-full animate-pulse"></div>
+                            <span class="text-xs text-gray-600">Claude - Orchestration</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chart Container (hidden by default) -->
+                <div id="chartContainer" class="bg-white rounded-lg shadow p-4 hidden">
+                    <h3 class="text-sm font-semibold text-gray-900 mb-3">Visualization</h3>
+                    <div style="height: 200px;">
+                        <canvas id="dynamicChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let dynamicChart = null;
+        let messageHistory = [];
+        
+        // Get CSRF token
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        // Format currency
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: 'USD'
+            }).format(Math.abs(amount));
+        }
+
+        // Handle enter key
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        // Send suggestion
+        function sendSuggestion(text) {
+            document.getElementById('chatInput').value = text;
+            sendMessage();
+        }
+
+        // Send message
+        async function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const message = input.value.trim();
+            
+            if (!message) return;
+            
+            // Add user message to chat
+            addMessage(message, 'user');
+            
+            // Clear input and disable
+            input.value = '';
+            input.disabled = true;
+            document.getElementById('sendButton').disabled = true;
+            
+            // Show typing indicator
+            document.getElementById('typingIndicator').classList.remove('hidden');
+            
+            // Hide suggestion chips after first message
+            if (messageHistory.length === 1) {
+                document.getElementById('suggestionChips').classList.add('hidden');
+            }
+            
+            try {
+                const response = await fetch('{% url "dashboard:process_chat" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    body: JSON.stringify({ message: message }),
+                    credentials: 'same-origin'
+                });
+                
+                const data = await response.json();
+                
+                // Hide typing indicator
+                document.getElementById('typingIndicator').classList.add('hidden');
+                
+                if (data.success) {
+                    // Add AI response
+                    addMessage(data.natural_language_response || 'I processed your request.', 'ai', data);
+                    
+                    // Update insights
+                    if (data.insights && data.insights.length > 0) {
+                        updateInsights(data.insights);
+                    }
+                    
+                    // Update chart if available
+                    if (data.charts && data.charts.length > 0) {
+                        displayChart(data.charts[0]);
+                    }
+                    
+                    // Update stats if available
+                    updateStats(data);
+                    
+                } else {
+                    addMessage('Sorry, I encountered an error processing your request.', 'ai');
+                }
+                
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('typingIndicator').classList.add('hidden');
+                addMessage('Sorry, I encountered an error. Please try again.', 'ai');
+            } finally {
+                input.disabled = false;
+                document.getElementById('sendButton').disabled = false;
+                input.focus();
+            }
+        }
+
+        // Add message to chat
+        function addMessage(text, sender, fullData = null) {
+            const messagesContainer = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'flex items-start space-x-3';
+            
+            if (sender === 'user') {
+                messageDiv.innerHTML = `
+                    <div class="flex-1 flex justify-end">
+                        <div class="bg-indigo-600 text-white rounded-lg p-4 max-w-md message-bubble">
+                            <p class="text-sm">${text}</p>
+                        </div>
+                    </div>
+                    <div class="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center text-xs font-bold">
+                        You
+                    </div>
+                `;
+            } else {
+                // Process text for better formatting
+                let formattedText = text;
+                
+                // Add any additional data insights
+                if (fullData && fullData.insights) {
+                    formattedText += '<ul class="mt-2 space-y-1">';
+                    fullData.insights.slice(0, 3).forEach(insight => {
+                        formattedText += `<li class="text-xs">• ${insight}</li>`;
+                    });
+                    formattedText += '</ul>';
+                }
+                
+                // Add suggested actions
+                if (fullData && fullData.suggested_actions && fullData.suggested_actions.length > 0) {
+                    formattedText += '<div class="mt-3 pt-3 border-t border-gray-200">';
+                    formattedText += '<p class="text-xs font-semibold mb-1">Suggested Actions:</p>';
+                    formattedText += '<ul class="space-y-1">';
+                    fullData.suggested_actions.forEach(action => {
+                        formattedText += `<li class="text-xs">💡 ${action}</li>`;
+                    });
+                    formattedText += '</ul></div>';
+                }
+                
+                messageDiv.innerHTML = `
+                    <div class="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold">
+                        AI
+                    </div>
+                    <div class="flex-1">
+                        <div class="bg-gray-100 rounded-lg p-4 message-bubble">
+                            <div class="text-sm text-gray-800">${formattedText}</div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            
+            // Store in history
+            messageHistory.push({ sender, text, timestamp: new Date(), data: fullData });
+        }
+
+        // Update insights panel
+        function updateInsights(insights) {
+            const container = document.getElementById('recentInsights');
+            container.innerHTML = insights.map(insight => `
+                <div class="insight-card flex items-start space-x-2 p-2 rounded hover:bg-gray-50">
+                    <div class="w-1 h-1 bg-indigo-500 rounded-full mt-2"></div>
+                    <p class="text-xs text-gray-600">${insight}</p>
+                </div>
+            `).join('');
+        }
+
+        // Update stats
+        function updateStats(data) {
+            if (data.data) {
+                // Update month spent if available
+                if (data.data.summary && data.data.summary.last_30_days) {
+                    document.getElementById('monthSpent').textContent = 
+                        '-' + formatCurrency(data.data.summary.last_30_days.total_spent);
+                }
+                
+                // Update categorized count
+                if (data.data.categorization) {
+                    document.getElementById('categorizedCount').textContent = 
+                        data.data.categorization.total_transactions || '0';
+                }
+                
+                // Update anomaly count
+                if (data.data.fraud) {
+                    document.getElementById('anomalyCount').textContent = 
+                        data.data.fraud.anomalies_found || data.data.fraud.predicted_fraud_count || '0';
+                }
+            }
+        }
+
+        // Display chart
+        function displayChart(chartData) {
+            const container = document.getElementById('chartContainer');
+            container.classList.remove('hidden');
+            
+            const ctx = document.getElementById('dynamicChart').getContext('2d');
+            
+            if (dynamicChart) {
+                dynamicChart.destroy();
+            }
+            
+            // Create chart based on type
+            if (chartData.type === 'pie') {
+                // Category colors matching the categorization page
+                const categoryColorMap = {
+                    'Food And Drink': '#ef4444',
+                    'General Merchandise': '#f97316',
+                    'Transportation': '#eab308',
+                    'Entertainment': '#84cc16',
+                    'General Services': '#22c55e',
+                    'Medical': '#10b981',
+                    'Personal Care': '#14b8a6',
+                    'Home Improvement': '#06b6d4',
+                    'Rent And Utilities': '#0ea5e9',
+                    'Travel': '#3b82f6',
+                    'Loan Payments': '#6366f1',
+                    'Government And Non Profit': '#8b5cf6',
+                    'Income': '#a855f7',
+                    'Transfer In': '#c084fc',
+                    'Transfer Out': '#e879f9',
+                    'Bank Fees': '#ec4899'
+                };
+                
+                // Get colors based on categories
+                const colors = chartData.data.map(d => 
+                    categoryColorMap[d.category] || '#9ca3af'
+                );
+                
+                dynamicChart = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: chartData.data.map(d => d.category),
+                        datasets: [{
+                            data: chartData.data.map(d => d.amount),
+                            backgroundColor: colors,
+                            borderWidth: 2,
+                            borderColor: '#fff'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: {
+                                    font: { size: 10 },
+                                    boxHeight: 8
+                                }
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        const label = context.label || '';
+                                        const value = formatCurrency(context.raw);
+                                        return label + ': ' + value;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            } else if (chartData.type === 'line') {
+                // Forecast chart
+                const forecast = chartData.data.forecast;
+                const historical = chartData.data.historical;
+                
+                dynamicChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: [...historical.dates, ...forecast.dates].map(d => 
+                            new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                        ),
+                        datasets: [{
+                            label: 'Balance',
+                            data: [...historical.balances, ...forecast.mean],
+                            borderColor: 'rgb(99, 102, 241)',
+                            tension: 0.1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false }
+                        },
+                        scales: {
+                            y: {
+                                ticks: {
+                                    font: { size: 10 }
+                                }
+                            },
+                            x: {
+                                ticks: {
+                                    font: { size: 10 },
+                                    maxRotation: 45,
+                                    minRotation: 45
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+        }
+
+        // Initialize on load
+        document.addEventListener('DOMContentLoaded', () => {
+            // Focus input
+            document.getElementById('chatInput').focus();
+            
+            // Load initial stats
+            loadInitialStats();
+        });
+
+        // Load initial stats
+        async function loadInitialStats() {
+            try {
+                // You can make a call to get initial stats here
+                // For now, we'll use placeholder values
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        }
+    </script>
+</body>
+</html>

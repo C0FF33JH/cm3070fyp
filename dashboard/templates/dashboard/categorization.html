@@ -1,0 +1,451 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transaction Categorization - AI-Orchestrated Open Banking Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <meta name="csrf-token" content="{{ csrf_token }}">
+    <style>
+        .category-card {
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+        }
+        .category-card:hover {
+            transform: translateY(-4px);
+            border-color: rgb(99, 102, 241);
+            box-shadow: 0 10px 25px rgba(99, 102, 241, 0.15);
+        }
+        .loading-shimmer {
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+        }
+        @keyframes shimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Header -->
+    <nav class="bg-white shadow-sm border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex items-center space-x-3">
+                    <div class="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg"></div>
+                    <h1 class="text-xl font-semibold text-gray-900">AI-Orchestrated Open Banking Dashboard</h1>
+                    <span class="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded-full">SetFit Active</span>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <span class="text-sm text-gray-500">{{ user.first_name }} {{ user.last_name }}</span>
+                    <span class="text-xs text-gray-400">Balance: ${{ account.balance|floatformat:2 }}</span>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Navigation Tabs (Simplified - only existing views) -->
+    <div class="bg-white border-b">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <nav class="flex space-x-8" aria-label="Tabs">
+                <a href="#" class="border-indigo-500 text-indigo-600 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                    Categorization
+                </a>
+                <a href="{% url 'dashboard:forecast' %}" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                    Cash Flow Forecast
+                </a>
+                <a href="{% url 'dashboard:fraud' %}" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                    Fraud Detection
+                </a>
+                <a href="{% url 'dashboard:chat' %}" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                    AI Assistant
+                </a>
+            </nav>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Stats Overview -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-600">Total Transactions</p>
+                        <p class="text-2xl font-semibold text-gray-900">{{ total_transactions }}</p>
+                    </div>
+                    <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                        {% comment %} <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                        </svg> {% endcomment %}
+                        <svg class="w-6 h-6 text-gray-800 dark:text-blue-600" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
+                            <path stroke="currentColor" stroke-linecap="round" stroke-width="2" d="M8 7V6a1 1 0 0 1 1-1h11a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-1M3 18v-7a1 1 0 0 1 1-1h11a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Zm8-3.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z"/>
+                        </svg>
+
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-600">Categorized</p>
+                        <p class="text-2xl font-semibold text-green-600">{{ categorized }}</p>
+                    </div>
+                    <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                        <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-600">Avg Confidence</p>
+                        <p class="text-2xl font-semibold text-indigo-600">
+                            {% if avg_confidence %}
+                                {{ avg_confidence|floatformat:1 }}%
+                            {% else %}
+                                -
+                            {% endif %}
+                        </p>
+                    </div>
+                    <div class="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center">
+                        {% comment %} <svg class="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                        </svg> {% endcomment %}
+                        <svg class="w-6 h-6 text-gray-800 dark:text-indigo-600" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
+                            <path fill-rule="evenodd" d="M9 7V2.221a2 2 0 0 0-.5.365L4.586 6.5a2 2 0 0 0-.365.5H9Zm2 0V2h7a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9h5a2 2 0 0 0 2-2Zm-1 9a1 1 0 1 0-2 0v2a1 1 0 1 0 2 0v-2Zm2-5a1 1 0 0 1 1 1v6a1 1 0 1 1-2 0v-6a1 1 0 0 1 1-1Zm4 4a1 1 0 1 0-2 0v3a1 1 0 1 0 2 0v-3Z" clip-rule="evenodd"/>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow p-6">
+                <button id="categorizeBtn" class="w-full bg-indigo-600 text-white py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors font-medium">
+                    Run Categorization
+                </button>
+            </div>
+        </div>
+
+        <!-- Charts Section -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold text-gray-900 mb-4">Spending by Category</h2>
+                <div class="relative" style="height: 300px;">
+                    <canvas id="categoryPieChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold text-gray-900 mb-4">Transaction Count by Category</h2>
+                <div class="relative" style="height: 300px;">
+                    <canvas id="categoryBarChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Categories Grid -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold text-gray-900 mb-4">Category Breakdown</h2>
+            <div id="categoryGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <!-- Categories will be inserted here -->
+            </div>
+        </div>
+
+        <!-- Recent Transactions -->
+        <div class="bg-white rounded-lg shadow p-6 mt-6">
+            <h2 class="text-lg font-semibold text-gray-900 mb-4">Recent Categorized Transactions</h2>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead>
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Confidence</th>
+                        </tr>
+                    </thead>
+                    <tbody id="transactionsList" class="bg-white divide-y divide-gray-200">
+                        <!-- Transactions will be inserted here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-4 right-4 transform translate-y-full transition-transform duration-300 ease-in-out">
+        <div class="bg-white rounded-lg shadow-lg p-4 flex items-center space-x-3">
+            <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+            <span id="toastMessage" class="text-sm font-medium text-gray-900"></span>
+        </div>
+    </div>
+
+    <script>
+        // Get data from Django
+        const statsData = {{ stats_json|safe }};
+        const transactionsData = {{ transactions_json|safe }};
+        
+        // Chart instances
+        let pieChart = null;
+        let barChart = null;
+
+        // Category colors
+        const categoryColors = {
+            'FOOD_AND_DRINK': '#ef4444',
+            'GENERAL_MERCHANDISE': '#f97316',
+            'TRANSPORTATION': '#eab308',
+            'ENTERTAINMENT': '#84cc16',
+            'GENERAL_SERVICES': '#22c55e',
+            'MEDICAL': '#10b981',
+            'PERSONAL_CARE': '#14b8a6',
+            'HOME_IMPROVEMENT': '#06b6d4',
+            'RENT_AND_UTILITIES': '#0ea5e9',
+            'TRAVEL': '#3b82f6',
+            'LOAN_PAYMENTS': '#6366f1',
+            'GOVERNMENT_AND_NON_PROFIT': '#8b5cf6',
+            'INCOME': '#a855f7',
+            'TRANSFER_IN': '#c084fc',
+            'TRANSFER_OUT': '#e879f9',
+            'BANK_FEES': '#ec4899'
+        };
+
+        // Format currency
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: 'USD'
+            }).format(Math.abs(amount));
+        }
+
+        // Format category name
+        function formatCategoryName(category) {
+            return category.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        }
+
+        // Show toast notification
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            const toastMessage = document.getElementById('toastMessage');
+            
+            toastMessage.textContent = message;
+            toast.classList.remove('translate-y-full');
+            
+            setTimeout(() => {
+                toast.classList.add('translate-y-full');
+            }, 3000);
+        }
+
+        // Update charts
+        function updateCharts(categories) {
+            if (!categories || categories.length === 0) return;
+            
+            // Filter for spending categories
+            const spendingCategories = categories.filter(c => 
+                c.total_amount < 0 && 
+                !['INCOME', 'TRANSFER_IN'].includes(c.ai_category)
+            ).slice(0, 8);
+            
+            const labels = spendingCategories.map(c => formatCategoryName(c.ai_category));
+            const amounts = spendingCategories.map(c => Math.abs(c.total_amount));
+            const counts = spendingCategories.map(c => c.count);
+            const colors = spendingCategories.map(c => categoryColors[c.ai_category] || '#gray');
+            
+            // Pie chart
+            const pieCtx = document.getElementById('categoryPieChart').getContext('2d');
+            if (pieChart) pieChart.destroy();
+            pieChart = new Chart(pieCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: amounts,
+                        backgroundColor: colors,
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                            labels: {
+                                font: { size: 11 },
+                                boxWidth: 12
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // Bar chart
+            const barCtx = document.getElementById('categoryBarChart').getContext('2d');
+            if (barChart) barChart.destroy();
+            barChart = new Chart(barCtx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Transactions',
+                        data: counts,
+                        backgroundColor: colors,
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+        }
+
+        // Update category grid
+        function updateCategoryGrid(categories) {
+            const grid = document.getElementById('categoryGrid');
+            if (!categories || categories.length === 0) {
+                grid.innerHTML = '<p class="text-gray-500 col-span-3">No categories found</p>';
+                return;
+            }
+            
+            grid.innerHTML = categories.map(cat => {
+                const isExpense = cat.total_amount < 0;
+                const amount = Math.abs(cat.total_amount);
+                const confidence = (cat.avg_confidence * 100).toFixed(1);
+                const color = categoryColors[cat.ai_category] || '#gray';
+                
+                return `
+                    <div class="category-card bg-gray-50 rounded-lg p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <div class="flex items-center space-x-2">
+                                <div class="w-3 h-3 rounded-full" style="background-color: ${color}"></div>
+                                <span class="text-sm font-medium text-gray-900">
+                                    ${formatCategoryName(cat.ai_category)}
+                                </span>
+                            </div>
+                            <span class="text-xs text-gray-500">${confidence}%</span>
+                        </div>
+                        <div class="space-y-1">
+                            <p class="text-xl font-semibold ${isExpense ? 'text-red-600' : 'text-green-600'}">
+                                ${isExpense ? '-' : '+'}${formatCurrency(amount)}
+                            </p>
+                            <p class="text-xs text-gray-500">${cat.count} transactions</p>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Display transactions
+        function displayTransactions(transactions) {
+            const tbody = document.getElementById('transactionsList');
+            if (!transactions || transactions.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="px-6 py-4 text-center text-gray-500">No transactions found</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = transactions.map(txn => `
+                <tr>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${txn.date}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${txn.description.substring(0, 30)}...</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="px-2 py-1 text-xs font-medium rounded-full" 
+                              style="background-color: ${categoryColors[txn.category]}20; color: ${categoryColors[txn.category]}">
+                            ${formatCategoryName(txn.category)}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm ${txn.amount < 0 ? 'text-red-600' : 'text-green-600'}">
+                        ${txn.amount < 0 ? '-' : '+'}${formatCurrency(txn.amount)}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="flex items-center">
+                            <div class="w-16 bg-gray-200 rounded-full h-2 mr-2">
+                                <div class="bg-indigo-600 h-2 rounded-full" style="width: ${txn.confidence * 100}%"></div>
+                            </div>
+                            <span class="text-sm text-gray-600">${(txn.confidence * 100).toFixed(0)}%</span>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // Get CSRF token
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        // Run categorization
+        async function runCategorization() {
+            const btn = document.getElementById('categorizeBtn');
+            btn.disabled = true;
+            btn.textContent = 'Processing...';
+            
+            try {
+                const response = await fetch('{% url "dashboard:categorize" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    credentials: 'same-origin'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast(`Successfully categorized ${data.categorized} transactions!`);
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    showToast('Categorization complete', 'success');
+                }
+                
+            } catch (error) {
+                console.error('Error:', error);
+                showToast('Failed to run categorization', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Run Categorization';
+            }
+        }
+
+        // Event listeners
+        document.getElementById('categorizeBtn').addEventListener('click', runCategorization);
+
+        // Initialize on load
+        document.addEventListener('DOMContentLoaded', () => {
+            if (statsData.categories) {
+                updateCharts(statsData.categories);
+                updateCategoryGrid(statsData.categories);
+            }
+            if (transactionsData.length > 0) {
+                displayTransactions(transactionsData);
+            }
+        });
+    </script>
+</body>
+</html>

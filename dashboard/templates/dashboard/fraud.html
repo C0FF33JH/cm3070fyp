@@ -1,0 +1,580 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fraud Detection - AI-Orchestrated Open Banking Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <meta name="csrf-token" content="{{ csrf_token }}">
+    <style>
+        .risk-card {
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        .risk-card.high-risk {
+            animation: pulse-red 2s infinite;
+        }
+        @keyframes pulse-red {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+            50% { box-shadow: 0 0 20px 10px rgba(239, 68, 68, 0.2); }
+        }
+        .fraud-badge {
+            animation: blink 1s infinite;
+        }
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        .risk-meter {
+            transition: all 0.5s ease;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Header -->
+    <nav class="bg-white shadow-sm border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex items-center space-x-3">
+                    <div class="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg"></div>
+                    <h1 class="text-xl font-semibold text-gray-900">AI-Orchestrated Open Banking Dashboard</h1>
+                    <span class="px-2 py-1 text-xs font-medium bg-red-100 text-red-800 rounded-full">XGBoost Active</span>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <span class="text-sm text-gray-500">{{ demo_user.first_name }} {{ demo_user.last_name }}</span>
+                    <span class="text-xs text-gray-400">Balance: ${{ demo_account.balance|floatformat:2 }}</span>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Navigation Tabs -->
+    <div class="bg-white border-b">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <nav class="flex space-x-8" aria-label="Tabs">
+                <a href="{% url 'dashboard:categorization' %}" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                    Categorization
+                </a>
+                <a href="{% url 'dashboard:forecast' %}" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                    Cash Flow Forecast
+                </a>
+                <a href="#" class="border-red-500 text-red-600 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                    Fraud Detection
+                </a>
+                <a href="{% url 'dashboard:chat' %}" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                    AI Assistant
+                </a>
+            </nav>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Detection Controls -->
+        <div class="bg-white rounded-lg shadow p-6 mb-8">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between">
+                <div>
+                    <h2 class="text-xl font-semibold text-gray-900">Fraud & Anomaly Detection</h2>
+                    <p class="text-sm text-gray-500 mt-1">
+                        {% if data_mode == 'demo' %}
+                            Statistical anomaly detection for demo transactions
+                        {% else %}
+                            XGBoost ML model analyzing enhanced fraud indicators
+                        {% endif %}
+                    </p>
+                </div>
+                <div class="flex space-x-4 mt-4 md:mt-0">
+                    {% if data_mode == 'demo' %}
+                    <div class="flex items-center space-x-2">
+                        <label class="text-sm font-medium text-gray-700">Sensitivity:</label>
+                        <select id="sensitivity" class="rounded-lg border-gray-300 shadow-sm text-sm">
+                            <option value="1.5">High (1.5σ)</option>
+                            <option value="2.0" selected>Medium (2.0σ)</option>
+                            <option value="2.5">Low (2.5σ)</option>
+                        </select>
+                    </div>
+                    {% endif %}
+                    <button id="runDetection" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium text-sm flex items-center space-x-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                        </svg>
+                        <span>Run Detection</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Key Metrics -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex items-center justify-between mb-2">
+                    <p class="text-sm font-medium text-gray-600">Transactions Analyzed</p>
+                    <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                    </svg>
+                </div>
+                <p class="text-2xl font-bold text-gray-900" id="totalAnalyzed">--</p>
+                <p class="text-xs text-gray-500 mt-1">Last 30 days</p>
+            </div>
+
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex items-center justify-between mb-2">
+                    <p class="text-sm font-medium text-gray-600">Anomalies Found</p>
+                    <div class="fraud-badge">
+                        <svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                        </svg>
+                    </div>
+                </div>
+                <p class="text-2xl font-bold text-red-600" id="anomaliesFound">--</p>
+                <p class="text-xs text-gray-500 mt-1" id="anomalyRate">--</p>
+            </div>
+
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex items-center justify-between mb-2">
+                    <p class="text-sm font-medium text-gray-600">Model Accuracy</p>
+                    <svg class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                </div>
+                <p class="text-2xl font-bold text-green-600" id="accuracy">--</p>
+                <p class="text-xs text-gray-500 mt-1">Precision: <span id="precision">--</span></p>
+            </div>
+
+            <div class="risk-card bg-white rounded-lg shadow p-6" id="overallRiskCard">
+                <div class="flex items-center justify-between mb-2">
+                    <p class="text-sm font-medium text-gray-600">Overall Risk</p>
+                    <svg class="w-5 h-5" id="riskIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                </div>
+                <p class="text-lg font-semibold" id="overallRisk">--</p>
+                <div class="mt-2">
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div id="riskMeter" class="risk-meter h-2 rounded-full" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Section -->
+        <div class="grid grid-cols-1 gap-6 mb-8">
+            <!-- Risk Distribution Chart (full width now) -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">Risk Distribution</h3>
+                <div class="relative" style="height: 300px;">
+                    <canvas id="riskDistChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Suspicious Transactions Table -->
+        <div class="bg-white rounded-lg shadow p-6 mb-8">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold text-gray-900">Suspicious Transactions</h3>
+                <div class="flex items-center space-x-2">
+                    <span class="text-sm text-gray-500">Sort by:</span>
+                    <select id="sortBy" class="text-sm rounded-lg border-gray-300">
+                        <option value="risk">Risk Score</option>
+                        <option value="amount">Amount</option>
+                        <option value="date">Date</option>
+                    </select>
+                </div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead>
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Risk</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Risk Score</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Factors</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="suspiciousTransactions" class="bg-white divide-y divide-gray-200">
+                        <tr>
+                            <td colspan="7" class="px-6 py-4 text-center text-gray-500">
+                                Run detection to see suspicious transactions
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Model Performance (for Kaggle mode) -->
+        <div id="modelPerformance" class="bg-white rounded-lg shadow p-6 hidden">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">Model Performance</h3>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="text-center">
+                    <p class="text-sm text-gray-600">True Positives</p>
+                    <p class="text-2xl font-bold text-green-600" id="truePositives">--</p>
+                </div>
+                <div class="text-center">
+                    <p class="text-sm text-gray-600">True Negatives</p>
+                    <p class="text-2xl font-bold text-green-600" id="trueNegatives">--</p>
+                </div>
+                <div class="text-center">
+                    <p class="text-sm text-gray-600">False Positives</p>
+                    <p class="text-2xl font-bold text-yellow-600" id="falsePositives">--</p>
+                </div>
+                <div class="text-center">
+                    <p class="text-sm text-gray-600">False Negatives</p>
+                    <p class="text-2xl font-bold text-red-600" id="falseNegatives">--</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-4 right-4 transform translate-y-full transition-transform duration-300 ease-in-out">
+        <div class="bg-white rounded-lg shadow-lg p-4 flex items-center space-x-3">
+            <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+            <span id="toastMessage" class="text-sm font-medium text-gray-900"></span>
+        </div>
+    </div>
+
+    <script>
+        const dataMode = '{{ data_mode }}';
+        let riskDistChart = null;
+        let detectionResults = null;
+
+        // Show toast
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            const toastMessage = document.getElementById('toastMessage');
+            toastMessage.textContent = message;
+            toast.classList.remove('translate-y-full');
+            setTimeout(() => {
+                toast.classList.add('translate-y-full');
+            }, 3000);
+        }
+
+        // Format currency
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: 'USD'
+            }).format(Math.abs(amount));
+        }
+
+        // Get CSRF token
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        // Run fraud detection
+        async function runDetection() {
+            const btn = document.getElementById('runDetection');
+            btn.disabled = true;
+            btn.innerHTML = '<svg class="animate-spin h-4 w-4 mr-2 inline" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Analyzing...';
+
+            try {
+                let url = '/api/fraud/';  // Use the API endpoint, not the page view
+                if (dataMode === 'demo') {
+                    const sensitivity = document.getElementById('sensitivity')?.value || '2.0';
+                    url += `?user=demo_user&sensitivity=${sensitivity}`;
+                } else {
+                    url += '?user=fraud_analyst';
+                }
+
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: {
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    credentials: 'same-origin'
+                });
+
+                const data = await response.json();
+                detectionResults = data;
+                
+                updateDisplay(data);
+                showToast('Fraud detection completed!');
+                
+            } catch (error) {
+                console.error('Error:', error);
+                showToast('Failed to run detection', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<svg class="w-4 h-4 mr-2 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg><span>Run Detection</span>';
+            }
+        }
+
+        // Update display with results
+        function updateDisplay(data) {
+            if (dataMode === 'demo') {
+                // Statistical anomaly detection results
+                document.getElementById('totalAnalyzed').textContent = data.total_analyzed || '0';
+                document.getElementById('anomaliesFound').textContent = data.anomalies_found || '0';
+                
+                const rate = data.total_analyzed > 0 
+                    ? ((data.anomalies_found / data.total_analyzed) * 100).toFixed(1) 
+                    : '0';
+                document.getElementById('anomalyRate').textContent = `${rate}% anomaly rate`;
+                
+                // For demo mode, show method instead of accuracy
+                document.getElementById('accuracy').textContent = 'Statistical';
+                document.getElementById('precision').textContent = `${data.sensitivity}σ`;
+                
+                // Update suspicious transactions
+                updateSuspiciousTransactions(data.anomalies || []);
+                
+                // Update risk level
+                updateRiskLevel(data.anomalies_found);
+                
+            } else {
+                // XGBoost fraud detection results
+                document.getElementById('totalAnalyzed').textContent = data.total_transactions || '0';
+                document.getElementById('anomaliesFound').textContent = data.predicted_fraud_count || '0';
+                
+                const rate = data.total_transactions > 0 
+                    ? ((data.predicted_fraud_count / data.total_transactions) * 100).toFixed(1)
+                    : '0';
+                document.getElementById('anomalyRate').textContent = `${rate}% fraud rate`;
+                
+                // Model metrics
+                if (data.metrics) {
+                    document.getElementById('accuracy').textContent = 
+                        `${(data.metrics.accuracy * 100).toFixed(1)}%`;
+                    document.getElementById('precision').textContent = 
+                        `${(data.metrics.precision * 100).toFixed(1)}%`;
+                }
+                
+                // Show confusion matrix
+                if (data.confusion_matrix) {
+                    const perf = document.getElementById('modelPerformance');
+                    perf.classList.remove('hidden');
+                    document.getElementById('truePositives').textContent = data.confusion_matrix.true_positives;
+                    document.getElementById('trueNegatives').textContent = data.confusion_matrix.true_negatives;
+                    document.getElementById('falsePositives').textContent = data.confusion_matrix.false_positives;
+                    document.getElementById('falseNegatives').textContent = data.confusion_matrix.false_negatives;
+                }
+                
+                // Update suspicious transactions
+                updateSuspiciousTransactions(data.top_risks || []);
+                
+                // Update charts
+                if (data.risk_distribution) {
+                    updateRiskDistributionChart(data.risk_distribution);
+                }
+                
+                // Update risk level
+                updateRiskLevel(data.predicted_fraud_count);
+            }
+        }
+
+        // Update suspicious transactions table
+        function updateSuspiciousTransactions(transactions) {
+            const tbody = document.getElementById('suspiciousTransactions');
+            
+            if (!transactions || transactions.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-4 text-center text-gray-500">No suspicious transactions found</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = transactions.map(txn => {
+                const riskScore = txn.z_score || txn.probability || 0;
+                const riskLevel = getRiskLevel(riskScore);
+                const riskColor = getRiskColor(riskLevel);
+                
+                return `
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="px-2 py-1 text-xs font-medium rounded-full ${riskColor.bg} ${riskColor.text}">
+                                ${riskLevel}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            ${txn.date ? new Date(txn.date).toLocaleDateString() : '--'}
+                        </td>
+                        <td class="px-6 py-4 text-sm text-gray-900">
+                            ${txn.description || txn.merchant || 'Unknown'}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-red-600">
+                            ${formatCurrency(txn.amount)}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="flex items-center">
+                                <div class="w-16 bg-gray-200 rounded-full h-2 mr-2">
+                                    <div class="${riskColor.bar} h-2 rounded-full" 
+                                         style="width: ${Math.min(riskScore * 10, 100)}%"></div>
+                                </div>
+                                <span class="text-sm text-gray-600">
+                                    ${typeof riskScore === 'number' ? riskScore.toFixed(2) : '--'}
+                                </span>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 text-xs text-gray-500">
+                            ${txn.category || txn.risk_factors?.join(', ') || '--'}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">
+                            <button class="text-indigo-600 hover:text-indigo-900">Review</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // Get risk level based on score
+        function getRiskLevel(score) {
+            if (dataMode === 'demo') {
+                // For z-scores
+                if (score > 3) return 'Critical';
+                if (score > 2.5) return 'High';
+                if (score > 2) return 'Medium';
+                return 'Low';
+            } else {
+                // For probabilities
+                if (score > 0.8) return 'Critical';
+                if (score > 0.6) return 'High';
+                if (score > 0.4) return 'Medium';
+                if (score > 0.2) return 'Low';
+                return 'Very Low';
+            }
+        }
+
+        // Get risk color
+        function getRiskColor(level) {
+            const colors = {
+                'Critical': { bg: 'bg-red-100', text: 'text-red-800', bar: 'bg-red-500' },
+                'High': { bg: 'bg-orange-100', text: 'text-orange-800', bar: 'bg-orange-500' },
+                'Medium': { bg: 'bg-yellow-100', text: 'text-yellow-800', bar: 'bg-yellow-500' },
+                'Low': { bg: 'bg-green-100', text: 'text-green-800', bar: 'bg-green-500' },
+                'Very Low': { bg: 'bg-blue-100', text: 'text-blue-800', bar: 'bg-blue-500' }
+            };
+            return colors[level] || colors['Low'];
+        }
+
+        // Update overall risk level
+        function updateRiskLevel(anomalyCount) {
+            const riskCard = document.getElementById('overallRiskCard');
+            const riskText = document.getElementById('overallRisk');
+            const riskMeter = document.getElementById('riskMeter');
+            const riskIcon = document.getElementById('riskIcon');
+            
+            let level, width, color, iconColor;
+            
+            if (anomalyCount === 0) {
+                level = 'Low Risk';
+                width = '20%';
+                color = 'bg-green-500';
+                iconColor = 'text-green-500';
+            } else if (anomalyCount <= 2) {
+                level = 'Medium Risk';
+                width = '50%';
+                color = 'bg-yellow-500';
+                iconColor = 'text-yellow-500';
+            } else if (anomalyCount <= 5) {
+                level = 'High Risk';
+                width = '75%';
+                color = 'bg-orange-500';
+                iconColor = 'text-orange-500';
+                riskCard.classList.add('high-risk');
+            } else {
+                level = 'Critical Risk';
+                width = '100%';
+                color = 'bg-red-500';
+                iconColor = 'text-red-500';
+                riskCard.classList.add('high-risk');
+            }
+            
+            riskText.textContent = level;
+            riskText.className = `text-lg font-semibold ${iconColor}`;
+            riskIcon.className = `w-5 h-5 ${iconColor}`;
+            riskMeter.className = `risk-meter h-2 rounded-full ${color}`;
+            riskMeter.style.width = width;
+        }
+
+        // Update risk distribution chart
+        function updateRiskDistributionChart(distribution) {
+            const ctx = document.getElementById('riskDistChart').getContext('2d');
+            
+            const labels = Object.keys(distribution).map(k => 
+                k.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())
+            );
+            const values = Object.values(distribution);
+            const colors = [
+                'rgba(34, 197, 94, 0.8)',   // green
+                'rgba(59, 130, 246, 0.8)',  // blue
+                'rgba(251, 191, 36, 0.8)',  // yellow
+                'rgba(251, 146, 60, 0.8)',  // orange
+                'rgba(239, 68, 68, 0.8)'    // red
+            ];
+            
+            if (riskDistChart) riskDistChart.destroy();
+            
+            riskDistChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: values,
+                        backgroundColor: colors,
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right'
+                        }
+                    }
+                }
+            });
+        }
+
+        // Sort transactions
+        document.getElementById('sortBy').addEventListener('change', (e) => {
+            if (!detectionResults) return;
+            
+            const sortBy = e.target.value;
+            let transactions = detectionResults.anomalies || detectionResults.top_risks || [];
+            
+            transactions.sort((a, b) => {
+                switch (sortBy) {
+                    case 'risk':
+                        return (b.z_score || b.probability || 0) - (a.z_score || a.probability || 0);
+                    case 'amount':
+                        return Math.abs(b.amount) - Math.abs(a.amount);
+                    case 'date':
+                        return new Date(b.date) - new Date(a.date);
+                    default:
+                        return 0;
+                }
+            });
+            
+            updateSuspiciousTransactions(transactions);
+        });
+
+        // Event listeners
+        document.getElementById('runDetection').addEventListener('click', runDetection);
+
+        // Auto-run detection on load
+        document.addEventListener('DOMContentLoaded', () => {
+            setTimeout(runDetection, 500);
+        });
+    </script>
+</body>
+</html>

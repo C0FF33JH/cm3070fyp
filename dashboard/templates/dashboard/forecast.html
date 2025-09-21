@@ -1,0 +1,645 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cash Flow Forecast - AI-Orchestrated Open Banking Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/date-fns@2.29.3/index.min.js"></script>
+    <meta name="csrf-token" content="{{ csrf_token }}">
+    <style>
+        .forecast-card {
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        .forecast-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transition: left 0.5s;
+        }
+        .forecast-card:hover::before {
+            left: 100%;
+        }
+        .pulse-dot {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(0.95); }
+        }
+        .gradient-text {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Header -->
+    <nav class="bg-white shadow-sm border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex items-center space-x-3">
+                    <div class="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg"></div>
+                    <h1 class="text-xl font-semibold text-gray-900">AI-Orchestrated Open Banking Dashboard</h1>
+                    <span class="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">Chronos-T5 Active</span>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <span class="text-sm text-gray-500">{{ user.first_name }} {{ user.last_name }}</span>
+                    <span class="text-xs text-gray-400">Balance: ${{ account.balance|floatformat:2 }}</span>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Navigation Tabs -->
+    <div class="bg-white border-b">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <nav class="flex space-x-8" aria-label="Tabs">
+                <a href="{% url 'dashboard:categorization' %}" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                    Categorization
+                </a>
+                <a href="#" class="border-indigo-500 text-indigo-600 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                    Cash Flow Forecast
+                </a>
+                <a href="{% url 'dashboard:fraud' %}" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                    Fraud Detection
+                </a>
+                <a href="{% url 'dashboard:chat' %}" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                    AI Assistant
+                </a>
+            </nav>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Forecast Controls -->
+        <div class="bg-white rounded-lg shadow p-6 mb-8">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between">
+                <div>
+                    <h2 class="text-xl font-semibold text-gray-900">Cash Flow Forecast</h2>
+                    <p class="text-sm text-gray-500 mt-1">AI-powered balance predictions using Chronos-T5</p>
+                </div>
+                <div class="flex space-x-4 mt-4 md:mt-0">
+                    <div class="flex items-center space-x-2">
+                        <label class="text-sm font-medium text-gray-700">Forecast Days:</label>
+                        <select id="forecastDays" class="rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
+                            <option value="7" selected>7 days</option>
+                            <option value="14">14 days</option>
+                            <option value="30">30 days</option>
+                        </select>
+                    </div>
+                    <button id="generateForecast" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium text-sm">
+                        Generate Forecast
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Key Metrics -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+            <div class="forecast-card bg-white rounded-lg shadow p-6">
+                <div class="flex items-center justify-between mb-2">
+                    <p class="text-sm font-medium text-gray-600">Current Balance</p>
+                    <div class="pulse-dot w-2 h-2 bg-green-500 rounded-full"></div>
+                </div>
+                <p class="text-2xl font-bold text-gray-900" id="currentBalance">
+                    ${{ account.balance|floatformat:2 }}
+                </p>
+                <p class="text-xs text-gray-500 mt-1">As of today</p>
+            </div>
+
+            <div class="forecast-card bg-white rounded-lg shadow p-6">
+                <div class="flex items-center justify-between mb-2">
+                    <p class="text-sm font-medium text-gray-600">Predicted (7d)</p>
+                    <svg class="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                    </svg>
+                </div>
+                <p class="text-2xl font-bold gradient-text" id="predicted7d">--</p>
+                <p class="text-xs mt-1" id="changeAmount">--</p>
+            </div>
+
+            <div class="forecast-card bg-white rounded-lg shadow p-6">
+                <div class="flex items-center justify-between mb-2">
+                    <p class="text-sm font-medium text-gray-600">Trend</p>
+                    <svg id="trendIcon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"></path>
+                    </svg>
+                </div>
+                <p class="text-lg font-semibold capitalize" id="trendText">--</p>
+                <p class="text-xs text-gray-500 mt-1" id="volatility">--</p>
+            </div>
+
+            <div class="forecast-card bg-white rounded-lg shadow p-6">
+                <div class="flex items-center justify-between mb-2">
+                    <p class="text-sm font-medium text-gray-600">Risk Level</p>
+                    <svg class="w-5 h-5 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                    </svg>
+                </div>
+                <p class="text-lg font-semibold" id="riskLevel">--</p>
+                <div class="mt-2">
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div id="riskBar" class="h-2 rounded-full transition-all duration-500" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Forecast Chart -->
+        <div class="bg-white rounded-lg shadow p-6 mb-8">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold text-gray-900">Balance Forecast</h3>
+                <div class="flex items-center space-x-4 text-sm">
+                    <div class="flex items-center space-x-1">
+                        <div class="w-3 h-3 bg-blue-500 rounded-full"></div>
+                        <span class="text-gray-600">Historical</span>
+                    </div>
+                    <div class="flex items-center space-x-1">
+                        <div class="w-3 h-3 bg-purple-500 rounded-full"></div>
+                        <span class="text-gray-600">Forecast</span>
+                    </div>
+                    <div class="flex items-center space-x-1">
+                        <div class="w-12 h-1 bg-purple-200"></div>
+                        <span class="text-gray-600">Confidence</span>
+                    </div>
+                </div>
+            </div>
+            <div class="relative" style="height: 400px;">
+                <canvas id="forecastChart"></canvas>
+                <div id="chartLoading" class="hidden absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center">
+                    <div class="text-center">
+                        <svg class="animate-spin h-8 w-8 text-indigo-600 mx-auto" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <p class="text-sm text-gray-600 mt-2">Generating forecast...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Insights and Warnings -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <!-- AI Insights -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-semibold text-gray-900">AI Insights</h3>
+                    <svg class="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                    </svg>
+                </div>
+                <div id="insightsList" class="space-y-3">
+                    <div class="flex items-start space-x-2">
+                        <div class="w-1 h-1 bg-blue-500 rounded-full mt-2"></div>
+                        <p class="text-sm text-gray-600">Generate a forecast to see AI insights</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Spending Patterns -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-semibold text-gray-900">Spending Patterns</h3>
+                    <svg class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path>
+                    </svg>
+                </div>
+                <div id="patternsList" class="space-y-3">
+                    <div class="animate-pulse">
+                        <div class="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+                        <div class="h-4 bg-gray-200 rounded w-1/2"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Detailed Forecast Table -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">Daily Forecast Details</h3>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead>
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Predicted Balance</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Confidence Range</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Change</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Uncertainty</th>
+                        </tr>
+                    </thead>
+                    <tbody id="forecastTable" class="bg-white divide-y divide-gray-200">
+                        <tr>
+                            <td colspan="5" class="px-6 py-4 text-center text-gray-500">
+                                Generate a forecast to see daily predictions
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-4 right-4 transform translate-y-full transition-transform duration-300 ease-in-out">
+        <div class="bg-white rounded-lg shadow-lg p-4 flex items-center space-x-3">
+            <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+            <span id="toastMessage" class="text-sm font-medium text-gray-900"></span>
+        </div>
+    </div>
+
+    <script>
+        let forecastChart = null;
+        let currentForecast = null;
+
+        // Show toast
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            const toastMessage = document.getElementById('toastMessage');
+            toastMessage.textContent = message;
+            toast.classList.remove('translate-y-full');
+            setTimeout(() => {
+                toast.classList.add('translate-y-full');
+            }, 3000);
+        }
+
+        // Format currency
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: 'USD'
+            }).format(Math.abs(amount));
+        }
+
+        // Format date
+        function formatDate(dateStr) {
+            const date = new Date(dateStr);
+            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        }
+
+        // Get CSRF token
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        // Generate forecast
+        async function generateForecast() {
+            const btn = document.getElementById('generateForecast');
+            const days = document.getElementById('forecastDays').value;
+            const loading = document.getElementById('chartLoading');
+            
+            btn.disabled = true;
+            btn.innerHTML = '<svg class="animate-spin h-4 w-4 mr-2 inline" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Generating...';
+            loading.classList.remove('hidden');
+            
+            try {
+                const response = await fetch(`{% url 'dashboard:forecast_api' %}?days=${days}&include_patterns=true`, {
+                    method: 'GET',
+                    headers: {
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    credentials: 'same-origin'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    currentForecast = data;
+                    updateForecastDisplay(data);
+                    showToast('Forecast generated successfully!');
+                } else {
+                    showToast(data.error || 'Failed to generate forecast', 'error');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showToast('Failed to generate forecast', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Generate Forecast';
+                loading.classList.add('hidden');
+            }
+        }
+
+        // Update forecast display
+        function updateForecastDisplay(data) {
+            const insights = data.insights;
+            const forecast = data.forecast;
+            
+            // Update key metrics
+            document.getElementById('predicted7d').textContent = formatCurrency(insights.predicted_balance_7d);
+            
+            const change = insights.expected_change;
+            const changeEl = document.getElementById('changeAmount');
+            changeEl.textContent = `${change >= 0 ? '+' : ''}${formatCurrency(change)}`;
+            changeEl.className = change >= 0 ? 'text-xs text-green-600 mt-1' : 'text-xs text-red-600 mt-1';
+            
+            // Update trend
+            const trendEl = document.getElementById('trendText');
+            const trendIcon = document.getElementById('trendIcon');
+            trendEl.textContent = insights.trend;
+            trendEl.className = `text-lg font-semibold capitalize ${
+                insights.trend === 'increasing' ? 'text-green-600' : 
+                insights.trend === 'decreasing' ? 'text-red-600' : 'text-gray-600'
+            }`;
+            
+            // Update volatility
+            document.getElementById('volatility').textContent = `Volatility: ${insights.volatility}`;
+            
+            // Update risk level
+            const riskEl = document.getElementById('riskLevel');
+            const riskBar = document.getElementById('riskBar');
+            riskEl.textContent = insights.risk_level.charAt(0).toUpperCase() + insights.risk_level.slice(1);
+            
+            const riskColors = {
+                'low': 'bg-green-500',
+                'medium': 'bg-yellow-500', 
+                'high': 'bg-red-500'
+            };
+            const riskWidths = {
+                'low': '33%',
+                'medium': '66%',
+                'high': '100%'
+            };
+            riskBar.className = `h-2 rounded-full transition-all duration-500 ${riskColors[insights.risk_level]}`;
+            riskBar.style.width = riskWidths[insights.risk_level];
+            
+            // Update chart
+            updateForecastChart(data);
+            
+            // Update insights list
+            updateInsights(insights);
+            
+            // Update patterns if available
+            if (data.spending_patterns) {
+                updateSpendingPatterns(data.spending_patterns);
+            }
+            
+            // Update forecast table
+            updateForecastTable(forecast, insights.current_balance);
+        }
+
+        // Update forecast chart
+        function updateForecastChart(data) {
+            const ctx = document.getElementById('forecastChart').getContext('2d');
+            
+            // Combine historical and forecast data
+            const historical = data.historical || {};
+            const forecast = data.forecast || {};
+            
+            // Historical data
+            const histDates = (historical.dates || []).map(d => formatDate(d));
+            const histBalances = historical.balances || [];
+            
+            // Forecast data
+            const forecastDates = (forecast.dates || []).map(d => formatDate(d));
+            const forecastMean = forecast.mean || [];
+            const forecastLower = forecast.lower_bound || [];
+            const forecastUpper = forecast.upper_bound || [];
+            
+            // All dates
+            const allDates = [...histDates, ...forecastDates];
+            
+            // Historical line (blue)
+            const histData = [...histBalances, ...Array(forecastDates.length).fill(null)];
+            
+            // Forecast line (purple)
+            const forecastData = [...Array(histDates.length).fill(null), ...forecastMean];
+            
+            // Confidence bands
+            const lowerData = [...Array(histDates.length).fill(null), ...forecastLower];
+            const upperData = [...Array(histDates.length).fill(null), ...forecastUpper];
+            
+            if (forecastChart) forecastChart.destroy();
+            
+            forecastChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: allDates,
+                    datasets: [
+                        {
+                            label: 'Historical Balance',
+                            data: histData,
+                            borderColor: 'rgb(59, 130, 246)',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            borderWidth: 2,
+                            tension: 0.1,
+                            spanGaps: false
+                        },
+                        {
+                            label: 'Forecast',
+                            data: forecastData,
+                            borderColor: 'rgb(147, 51, 234)',
+                            backgroundColor: 'rgba(147, 51, 234, 0.1)',
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            tension: 0.1,
+                            spanGaps: false
+                        },
+                        {
+                            label: 'Upper Bound',
+                            data: upperData,
+                            borderColor: 'rgba(147, 51, 234, 0.2)',
+                            backgroundColor: 'rgba(147, 51, 234, 0.05)',
+                            borderWidth: 1,
+                            fill: '+1',
+                            tension: 0.1,
+                            pointRadius: 0,
+                            spanGaps: false
+                        },
+                        {
+                            label: 'Lower Bound',
+                            data: lowerData,
+                            borderColor: 'rgba(147, 51, 234, 0.2)',
+                            backgroundColor: 'rgba(147, 51, 234, 0.05)',
+                            borderWidth: 1,
+                            fill: '-1',
+                            tension: 0.1,
+                            pointRadius: 0,
+                            spanGaps: false
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.dataset.label + ': ' + formatCurrency(context.parsed.y);
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            ticks: {
+                                callback: function(value) {
+                                    return '$' + (value/1000).toFixed(0) + 'k';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Update insights
+        function updateInsights(insights) {
+            const insightsList = document.getElementById('insightsList');
+            const items = [];
+            
+            // Add trend insight
+            if (insights.trend === 'increasing') {
+                items.push('📈 Your balance is trending upward');
+            } else if (insights.trend === 'decreasing') {
+                items.push('📉 Your balance is trending downward');
+            } else {
+                items.push('➡️ Your balance is relatively stable');
+            }
+            
+            // Add volatility insight
+            if (insights.volatility === 'high') {
+                items.push('⚡ High volatility detected in spending patterns');
+            } else {
+                items.push('✅ Spending patterns are consistent');
+            }
+            
+            // Add risk insight
+            if (insights.risk_level === 'high') {
+                items.push('⚠️ Risk of negative balance detected');
+            } else if (insights.risk_level === 'medium') {
+                items.push('📊 Moderate financial risk detected');
+            } else {
+                items.push('🛡️ Low financial risk - healthy buffer maintained');
+            }
+            
+            // Add warnings
+            if (insights.warnings) {
+                insights.warnings.forEach(w => items.push('🚨 ' + w));
+            }
+            
+            // Add confidence interval insight
+            const ci = insights.confidence_interval;
+            items.push(`📉 95% confidence range: ${formatCurrency(ci.lower)} - ${formatCurrency(ci.upper)}`);
+            
+            insightsList.innerHTML = items.map(item => `
+                <div class="flex items-start space-x-2">
+                    <div class="w-1 h-1 bg-indigo-500 rounded-full mt-2"></div>
+                    <p class="text-sm text-gray-600">${item}</p>
+                </div>
+            `).join('');
+        }
+
+        // Update spending patterns
+        function updateSpendingPatterns(patterns) {
+            const patternsList = document.getElementById('patternsList');
+            const items = [];
+            
+            if (patterns.avg_daily_spending) {
+                items.push(`Average daily spending: ${formatCurrency(Math.abs(patterns.avg_daily_spending))}`);
+            }
+            
+            if (patterns.category_breakdown && patterns.category_breakdown.length > 0) {
+                const top3 = patterns.category_breakdown.slice(0, 3);
+                items.push('Top spending categories:');
+                top3.forEach(cat => {
+                    const name = cat.ai_category.replace(/_/g, ' ').toLowerCase();
+                    items.push(`• ${name}: ${formatCurrency(Math.abs(cat.total))}`);
+                });
+            }
+            
+            patternsList.innerHTML = items.map(item => `
+                <p class="text-sm text-gray-600">${item}</p>
+            `).join('');
+        }
+
+        // Update forecast table
+        function updateForecastTable(forecast, currentBalance) {
+            const tbody = document.getElementById('forecastTable');
+            const dates = forecast.dates || [];
+            const mean = forecast.mean || [];
+            const lower = forecast.lower_bound || [];
+            const upper = forecast.upper_bound || [];
+            const stdDev = forecast.std_dev || [];
+            
+            if (dates.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="px-6 py-4 text-center text-gray-500">No forecast data available</td></tr>';
+                return;
+            }
+            
+            let prevBalance = currentBalance;
+            
+            tbody.innerHTML = dates.map((date, i) => {
+                const balance = mean[i];
+                const change = balance - prevBalance;
+                const uncertainty = (stdDev[i] / balance * 100).toFixed(1);
+                
+                const row = `
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            ${formatDate(date)}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            ${formatCurrency(balance)}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                            ${formatCurrency(lower[i])} - ${formatCurrency(upper[i])}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm ${change >= 0 ? 'text-green-600' : 'text-red-600'}">
+                            ${change >= 0 ? '+' : ''}${formatCurrency(change)}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="flex items-center">
+                                <div class="w-16 bg-gray-200 rounded-full h-2 mr-2">
+                                    <div class="bg-purple-600 h-2 rounded-full" style="width: ${Math.min(uncertainty * 2, 100)}%"></div>
+                                </div>
+                                <span class="text-sm text-gray-600">${uncertainty}%</span>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+                prevBalance = balance;
+                return row;
+            }).join('');
+        }
+
+        // Event listeners
+        document.getElementById('generateForecast').addEventListener('click', generateForecast);
+
+        // Generate initial forecast on load
+        document.addEventListener('DOMContentLoaded', () => {
+            setTimeout(generateForecast, 500);
+        });
+    </script>
+</body>
+</html>
