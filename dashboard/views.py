@@ -1151,5 +1151,270 @@ def process_chat(request):
             'natural_language_response': "I'm sorry, I encountered an error processing your request. Please try again."
         }, status=500)
     
+# Add these views to dashboard/views.py
+
+def receipts_view(request):
+    """Receipt parser dashboard view"""
+    user = User.objects.get(username='demo_user')
+    account = user.accounts.first()
+    
+    if not account:
+        return render(request, 'dashboard/no_account.html')
+    
+    context = {
+        'user': user,
+        'account': account,
+    }
+    
+    return render(request, 'dashboard/receipts.html', context)
+
+# @csrf_exempt
+# @require_http_methods(["POST"])
+# def parse_receipt_api(request):
+#     """API endpoint for receipt parsing"""
+#     from dashboard.ml_services.receipt_service import get_receipt_service
+    
+#     # Check if image file was uploaded
+#     if 'receipt' not in request.FILES:
+#         return JsonResponse({'error': 'No receipt image provided', 'success': False}, status=400)
+    
+#     receipt_file = request.FILES['receipt']
+    
+#     # Get user and account
+#     user = User.objects.get(username='demo_user')
+#     account = user.accounts.first()
+    
+#     if not account:
+#         return JsonResponse({'error': 'No account found', 'success': False}, status=404)
+    
+#     try:
+#         # Parse receipt
+#         service = get_receipt_service()
+#         result = service.process_receipt(receipt_file)
+        
+#         if result['success']:
+#             # Try to match to transaction
+#             receipt_data = result['data']
+#             if receipt_data.get('total'):
+#                 match = service.match_receipt_to_transaction(receipt_data, account.id)
+#                 result['matched_transaction'] = match
+        
+#         # Clean any Decimal values
+#         result = clean_for_json_field(result)
+        
+#         return JsonResponse(result, encoder=CustomJSONEncoder)
+        
+#     except Exception as e:
+#         print(f"Receipt parsing error: {e}")
+#         import traceback
+#         traceback.print_exc()
+#         return JsonResponse({
+#             'success': False,
+#             'error': str(e),
+#             'data': None
+#         }, status=500)
+
+# Replace parse_receipt_api in dashboard/views.py with this proper implementation
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def parse_receipt_api(request):
+    """API endpoint for receipt parsing using TrOCR"""
+    from dashboard.ml_services.receipt_service import get_receipt_service
+    
+    print("Receipt parsing request received")
+    
+    # Check if image file was uploaded
+    if 'receipt' not in request.FILES:
+        return JsonResponse({'error': 'No receipt image provided', 'success': False}, status=400)
+    
+    receipt_file = request.FILES['receipt']
+    print(f"Processing file: {receipt_file.name}, size: {receipt_file.size} bytes")
+    
+    # Get user and account
+    user = User.objects.get(username='demo_user')
+    account = user.accounts.first()
+    
+    if not account:
+        return JsonResponse({'error': 'No account found', 'success': False}, status=404)
+    
+    try:
+        # Get the receipt service
+        print("Loading receipt service...")
+        service = get_receipt_service()
+        
+        # Process the receipt
+        print("Processing receipt with TrOCR...")
+        result = service.process_receipt(receipt_file, enhance=True)
+        
+        print(f"Processing result: success={result.get('success')}")
+        
+        if result['success']:
+            # Try to match to transaction
+            receipt_data = result['data']
+            print(f"Extracted data: merchant={receipt_data.get('merchant')}, total={receipt_data.get('total')}")
+            
+            if receipt_data.get('total'):
+                print(f"Attempting to match transaction for amount ${receipt_data['total']}")
+                match = service.match_receipt_to_transaction(receipt_data, account.id)
+                if match:
+                    print(f"Found matching transaction: {match.get('description')}")
+                    result['matched_transaction'] = match
+                else:
+                    print("No matching transaction found")
+        else:
+            print(f"Receipt parsing failed: {result.get('error')}")
+        
+        # Clean any Decimal values for JSON serialization
+        result = clean_for_json_field(result)
+        
+        return JsonResponse(result, encoder=CustomJSONEncoder)
+        
+    except Exception as e:
+        print(f"Receipt parsing error: {e}")
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({
+            'success': False,
+            'error': str(e),
+            'data': None
+        }, status=500)
+
+@require_http_methods(["GET"])
+def generate_sample_receipt(request):
+    """Generate a sample receipt for testing"""
+    from PIL import Image, ImageDraw, ImageFont
+    from django.http import HttpResponse
+    import io
+    
+    receipt_type = request.GET.get('type', 'grocery')
+    
+    # Create a simple receipt image
+    width, height = 400, 600
+    image = Image.new('RGB', (width, height), color='white')
+    draw = ImageDraw.Draw(image)
+    
+    # Try to use a better font, fallback to default
+    try:
+        font_large = ImageFont.load_default()
+        font_normal = ImageFont.load_default()
+        font_small = ImageFont.load_default()
+    except:
+        font_large = ImageFont.load_default()
+        font_normal = ImageFont.load_default()
+        font_small = ImageFont.load_default()
+    
+    # Receipt content based on type
+    receipts = {
+        'grocery': {
+            'merchant': 'WHOLE FOODS',
+            'items': [
+                ('Organic Bananas', 3.99),
+                ('Almond Milk', 4.49),
+                ('Whole Wheat Bread', 3.29),
+                ('Free Range Eggs', 5.99),
+                ('Avocados (3)', 4.50),
+            ],
+            'subtotal': 22.26,
+            'tax': 1.95,
+            'total': 24.21,
+            'date': '09/21/2025',
+            'time': '14:32'
+        },
+        'coffee': {
+            'merchant': 'STARBUCKS',
+            'items': [
+                ('Venti Latte', 5.95),
+                ('Blueberry Muffin', 3.50),
+                ('Extra Shot', 0.75),
+            ],
+            'subtotal': 10.20,
+            'tax': 0.89,
+            'total': 11.09,
+            'date': '09/21/2025',
+            'time': '08:45'
+        },
+        'restaurant': {
+            'merchant': 'BLUE MOON CAFE',
+            'items': [
+                ('Caesar Salad', 12.50),
+                ('Grilled Salmon', 28.95),
+                ('House Wine', 8.50),
+                ('Tiramisu', 9.95),
+            ],
+            'subtotal': 59.90,
+            'tax': 5.24,
+            'total': 65.14,
+            'date': '09/20/2025',
+            'time': '19:30'
+        },
+        'pharmacy': {
+            'merchant': 'WALGREENS',
+            'items': [
+                ('Vitamin D3', 12.99),
+                ('Ibuprofen 200mg', 8.49),
+                ('Band-Aids', 5.99),
+            ],
+            'subtotal': 27.47,
+            'tax': 2.40,
+            'total': 29.87,
+            'date': '09/21/2025',
+            'time': '11:15'
+        }
+    }
+    
+    receipt = receipts.get(receipt_type, receipts['grocery'])
+    
+    # Draw receipt
+    y = 20
+    
+    # Merchant name
+    draw.text((width//2 - len(receipt['merchant'])*5, y), receipt['merchant'], fill='black', font=font_large)
+    y += 40
+    
+    # Date and time
+    draw.text((50, y), f"Date: {receipt['date']}", fill='black', font=font_normal)
+    draw.text((250, y), f"Time: {receipt['time']}", fill='black', font=font_normal)
+    y += 30
+    
+    draw.line([(30, y), (width-30, y)], fill='black', width=1)
+    y += 20
+    
+    # Items
+    for item_name, price in receipt['items']:
+        draw.text((50, y), item_name, fill='black', font=font_normal)
+        draw.text((width - 80, y), f"${price:.2f}", fill='black', font=font_normal)
+        y += 25
+    
+    y += 10
+    draw.line([(30, y), (width-30, y)], fill='black', width=1)
+    y += 20
+    
+    # Totals
+    draw.text((50, y), "Subtotal:", fill='black', font=font_normal)
+    draw.text((width - 80, y), f"${receipt['subtotal']:.2f}", fill='black', font=font_normal)
+    y += 25
+    
+    draw.text((50, y), "Tax:", fill='black', font=font_normal)
+    draw.text((width - 80, y), f"${receipt['tax']:.2f}", fill='black', font=font_normal)
+    y += 25
+    
+    draw.text((50, y), "TOTAL:", fill='black', font=font_large)
+    draw.text((width - 90, y), f"${receipt['total']:.2f}", fill='black', font=font_large)
+    y += 40
+    
+    draw.line([(30, y), (width-30, y)], fill='black', width=1)
+    y += 20
+    
+    draw.text((width//2 - 60, y), "THANK YOU!", fill='black', font=font_normal)
+    
+    # Save to bytes
+    img_bytes = io.BytesIO()
+    image.save(img_bytes, format='PNG')
+    img_bytes.seek(0)
+    
+    response = HttpResponse(img_bytes, content_type='image/png')
+    response['Content-Disposition'] = f'inline; filename="sample_{receipt_type}.png"'
+    return response
 
 

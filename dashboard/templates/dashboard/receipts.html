@@ -1,0 +1,596 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Receipt Parser - AI Banking Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <meta name="csrf-token" content="{{ csrf_token }}">
+    <style>
+        .drop-zone {
+            transition: all 0.3s ease;
+            background-image: url("data:image/svg+xml,%3csvg width='100%25' height='100%25' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100%25' height='100%25' fill='none' stroke='%239CA3AF' stroke-width='2' stroke-dasharray='10%2c 10' stroke-dashoffset='0' stroke-linecap='square'/%3e%3c/svg%3e");
+        }
+        .drop-zone.dragover {
+            background-color: rgba(99, 102, 241, 0.05);
+            border-color: rgb(99, 102, 241);
+            background-image: url("data:image/svg+xml,%3csvg width='100%25' height='100%25' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100%25' height='100%25' fill='none' stroke='%236366F1' stroke-width='2' stroke-dasharray='10%2c 10' stroke-dashoffset='0' stroke-linecap='square'/%3e%3c/svg%3e");
+        }
+        .receipt-preview {
+            max-height: 400px;
+            object-fit: contain;
+        }
+        .pulse-dot {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .scan-line {
+            position: absolute;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #3b82f6, transparent);
+            animation: scan 2s linear infinite;
+        }
+        @keyframes scan {
+            0% { top: 0; }
+            100% { top: 100%; }
+        }
+        .field-label {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Header -->
+    <nav class="bg-white shadow-sm border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex items-center space-x-3">
+                    <div class="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg"></div>
+                    <h1 class="text-xl font-semibold text-gray-900">AI Banking Dashboard</h1>
+                    <span class="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded-full">TrOCR Active</span>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <span class="text-sm text-gray-500">{{ user.first_name }} {{ user.last_name }}</span>
+                    <span class="text-xs text-gray-400">Balance: ${{ account.balance|floatformat:2 }}</span>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Navigation Tabs -->
+    <div class="bg-white border-b">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <nav class="flex space-x-8" aria-label="Tabs">
+                <a href="{% url 'dashboard:categorization' %}" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                    Categorization
+                </a>
+                <a href="{% url 'dashboard:forecast' %}" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                    Cash Flow Forecast
+                </a>
+                <a href="{% url 'dashboard:fraud' %}" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                    Fraud Detection
+                </a>
+                <a href="{% url 'dashboard:chat' %}" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                    AI Assistant
+                </a>
+                <a href="#" class="border-indigo-500 text-indigo-600 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                    Receipt Parser
+                </a>
+            </nav>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <!-- Upload Section -->
+            <div>
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h2 class="text-lg font-semibold text-gray-900 mb-4">Upload Receipt</h2>
+                    
+                    <!-- Drop Zone -->
+                    <div id="dropZone" class="drop-zone rounded-lg p-8 text-center cursor-pointer">
+                        <input type="file" id="fileInput" accept="image/*" class="hidden" onchange="handleFileSelect(event)">
+                        
+                        <div id="uploadPrompt">
+                            <svg class="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                            </svg>
+                            <p class="text-base font-medium text-gray-900 mb-1">Drop receipt image here</p>
+                            <p class="text-sm text-gray-500">or click to browse</p>
+                            <p class="text-xs text-gray-400 mt-2">Supports: JPG, PNG, PDF</p>
+                        </div>
+                        
+                        <!-- Preview (hidden initially) -->
+                        <div id="imagePreview" class="hidden">
+                            <div class="relative">
+                                <img id="previewImg" class="receipt-preview mx-auto rounded-lg" alt="Receipt preview">
+                                <div class="scan-line"></div>
+                            </div>
+                            <button onclick="resetUpload()" class="mt-4 px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200">
+                                Change Image
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Parse Button -->
+                    <button id="parseButton" onclick="parseReceipt()" disabled class="w-full mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                        <span id="parseButtonText">Select a receipt to parse</span>
+                    </button>
+                    
+                    <!-- Sample Receipts -->
+                    <div class="mt-6 pt-6 border-t">
+                        <p class="text-sm font-medium text-gray-700 mb-3">Or try a sample receipt:</p>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button onclick="generateSample('grocery')" class="px-3 py-2 text-sm bg-gray-100 rounded hover:bg-gray-200">
+                                🛒 Grocery Store
+                            </button>
+                            <button onclick="generateSample('coffee')" class="px-3 py-2 text-sm bg-gray-100 rounded hover:bg-gray-200">
+                                ☕ Coffee Shop
+                            </button>
+                            <button onclick="generateSample('restaurant')" class="px-3 py-2 text-sm bg-gray-100 rounded hover:bg-gray-200">
+                                🍽️ Restaurant
+                            </button>
+                            <button onclick="generateSample('pharmacy')" class="px-3 py-2 text-sm bg-gray-100 rounded hover:bg-gray-200">
+                                💊 Pharmacy
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- OCR Status -->
+                <div id="ocrStatus" class="bg-white rounded-lg shadow p-4 mt-4 hidden">
+                    <div class="flex items-center space-x-3">
+                        <div class="pulse-dot w-2 h-2 bg-yellow-500 rounded-full"></div>
+                        <span class="text-sm text-gray-600">Processing with TrOCR...</span>
+                    </div>
+                    <div class="mt-2 w-full bg-gray-200 rounded-full h-2">
+                        <div id="progressBar" class="bg-indigo-600 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Results Section -->
+            <div>
+                <!-- Parsed Data -->
+                <div id="resultsCard" class="bg-white rounded-lg shadow p-6 hidden">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-lg font-semibold text-gray-900">Parsed Receipt</h2>
+                        <span id="confidenceBadge" class="px-2 py-1 text-xs font-medium rounded-full">
+                            <!-- Confidence badge will be inserted here -->
+                        </span>
+                    </div>
+                    
+                    <div class="space-y-4">
+                        <!-- Merchant -->
+                        <div>
+                            <label class="field-label text-xs font-semibold uppercase tracking-wider">Merchant</label>
+                            <p id="merchantName" class="text-lg font-medium text-gray-900">--</p>
+                        </div>
+                        
+                        <!-- Date & Time -->
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="field-label text-xs font-semibold uppercase tracking-wider">Date</label>
+                                <p id="receiptDate" class="text-base text-gray-900">--</p>
+                            </div>
+                            <div>
+                                <label class="field-label text-xs font-semibold uppercase tracking-wider">Time</label>
+                                <p id="receiptTime" class="text-base text-gray-900">--</p>
+                            </div>
+                        </div>
+                        
+                        <!-- Items -->
+                        <div id="itemsSection" class="hidden">
+                            <label class="field-label text-xs font-semibold uppercase tracking-wider">Items</label>
+                            <div id="itemsList" class="mt-2 space-y-1">
+                                <!-- Items will be inserted here -->
+                            </div>
+                        </div>
+                        
+                        <!-- Amounts -->
+                        <div class="pt-4 border-t space-y-2">
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm text-gray-600">Subtotal</span>
+                                <span id="subtotal" class="text-sm font-medium text-gray-900">--</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm text-gray-600">Tax</span>
+                                <span id="tax" class="text-sm font-medium text-gray-900">--</span>
+                            </div>
+                            <div class="flex justify-between items-center pt-2 border-t">
+                                <span class="text-base font-medium text-gray-900">Total</span>
+                                <span id="total" class="text-lg font-bold text-indigo-600">--</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Additional Info -->
+                        <div id="additionalInfo" class="pt-4 border-t text-sm text-gray-600 hidden">
+                            <p id="phone">Phone: --</p>
+                            <p id="address">Address: --</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Actions -->
+                    <div class="mt-6 flex space-x-3">
+                        <button onclick="matchTransaction()" class="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
+                            Match to Transaction
+                        </button>
+                        <button onclick="saveReceipt()" class="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
+                            Save Receipt
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Matched Transaction -->
+                <div id="matchedCard" class="bg-green-50 border border-green-200 rounded-lg p-4 mt-4 hidden">
+                    <div class="flex items-start space-x-3">
+                        <svg class="w-5 h-5 text-green-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <div class="flex-1">
+                            <h3 class="text-sm font-medium text-green-900">Transaction Matched!</h3>
+                            <p id="matchedDetails" class="text-sm text-green-700 mt-1">--</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Raw OCR Text -->
+                <div class="bg-white rounded-lg shadow p-4 mt-4">
+                    <button onclick="toggleRawText()" class="flex items-center justify-between w-full text-left">
+                        <span class="text-sm font-medium text-gray-700">Raw OCR Text</span>
+                        <svg id="rawTextToggle" class="w-5 h-5 text-gray-400 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
+                    </button>
+                    <div id="rawText" class="mt-3 p-3 bg-gray-50 rounded text-xs text-gray-600 font-mono hidden" style="white-space: pre-wrap;">
+                        <!-- Raw text will be inserted here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-4 right-4 transform translate-y-full transition-transform duration-300 ease-in-out">
+        <div class="bg-white rounded-lg shadow-lg p-4 flex items-center space-x-3">
+            <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+            <span id="toastMessage" class="text-sm font-medium text-gray-900"></span>
+        </div>
+    </div>
+
+    <script>
+        let selectedFile = null;
+        let parsedData = null;
+
+        // Get CSRF token
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        // Format currency
+        function formatCurrency(amount) {
+            if (amount === null || amount === undefined) return '--';
+            return new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: 'USD'
+            }).format(Math.abs(amount));
+        }
+
+        // Show toast
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            const toastMessage = document.getElementById('toastMessage');
+            toastMessage.textContent = message;
+            toast.classList.remove('translate-y-full');
+            setTimeout(() => {
+                toast.classList.add('translate-y-full');
+            }, 3000);
+        }
+
+        // Setup drop zone
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+
+        dropZone.addEventListener('click', () => fileInput.click());
+
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        });
+
+        // Handle file selection
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                handleFile(file);
+            }
+        }
+
+        // Handle file
+        function handleFile(file) {
+            if (!file.type.startsWith('image/')) {
+                showToast('Please select an image file', 'error');
+                return;
+            }
+            
+            selectedFile = file;
+            
+            // Preview image
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                document.getElementById('previewImg').src = e.target.result;
+                document.getElementById('uploadPrompt').classList.add('hidden');
+                document.getElementById('imagePreview').classList.remove('hidden');
+                
+                // Enable parse button
+                document.getElementById('parseButton').disabled = false;
+                document.getElementById('parseButtonText').textContent = 'Parse Receipt';
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // Reset upload
+        function resetUpload() {
+            selectedFile = null;
+            document.getElementById('uploadPrompt').classList.remove('hidden');
+            document.getElementById('imagePreview').classList.add('hidden');
+            document.getElementById('parseButton').disabled = true;
+            document.getElementById('parseButtonText').textContent = 'Select a receipt to parse';
+            document.getElementById('resultsCard').classList.add('hidden');
+            fileInput.value = '';
+        }
+
+        // Parse receipt
+        async function parseReceipt() {
+            if (!selectedFile) {
+                showToast('Please select a receipt image', 'error');
+                return;
+            }
+            
+            console.log('Starting receipt parse for file:', selectedFile.name);
+            
+            const formData = new FormData();
+            formData.append('receipt', selectedFile);
+            
+            // Show progress
+            document.getElementById('ocrStatus').classList.remove('hidden');
+            document.getElementById('parseButton').disabled = true;
+            document.getElementById('parseButtonText').textContent = 'Processing...';
+            
+            // Animate progress bar (slower for actual OCR)
+            let progress = 0;
+            const progressInterval = setInterval(() => {
+                progress += 5;  // Slower progress for actual OCR
+                document.getElementById('progressBar').style.width = Math.min(progress, 90) + '%';
+            }, 500);  // Update every 500ms instead of 200ms
+            
+            try {
+                console.log('Sending request to parse receipt...');
+                const response = await fetch('/api/parse-receipt/', {  // Use direct path
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    body: formData,
+                    credentials: 'same-origin'
+                });
+                
+                console.log('Response status:', response.status);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const result = await response.json();
+                console.log('Parse result:', result);
+                
+                clearInterval(progressInterval);
+                document.getElementById('progressBar').style.width = '100%';
+                
+                if (result.success) {
+                    parsedData = result.data;
+                    displayResults(result.data);
+                    
+                    // Check for matched transaction
+                    if (result.matched_transaction) {
+                        displayMatch(result.matched_transaction);
+                    }
+                    
+                    showToast('Receipt parsed successfully!');
+                } else {
+                    console.error('Parse failed:', result.error);
+                    showToast(result.error || 'Failed to parse receipt', 'error');
+                }
+                
+            } catch (error) {
+                clearInterval(progressInterval);
+                console.error('Error parsing receipt:', error);
+                showToast('Failed to parse receipt: ' + error.message, 'error');
+            } finally {
+                // Reset status
+                setTimeout(() => {
+                    document.getElementById('ocrStatus').classList.add('hidden');
+                    document.getElementById('progressBar').style.width = '0%';
+                    document.getElementById('parseButton').disabled = false;
+                    document.getElementById('parseButtonText').textContent = 'Parse Receipt';
+                }, 1000);
+            }
+        }
+
+        // Display results
+        function displayResults(data) {
+            document.getElementById('resultsCard').classList.remove('hidden');
+            
+            // Confidence badge
+            const confidence = (data.confidence || 0) * 100;
+            const confidenceBadge = document.getElementById('confidenceBadge');
+            if (confidence > 80) {
+                confidenceBadge.className = 'px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800';
+                confidenceBadge.textContent = `${confidence.toFixed(0)}% Confidence`;
+            } else if (confidence > 50) {
+                confidenceBadge.className = 'px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800';
+                confidenceBadge.textContent = `${confidence.toFixed(0)}% Confidence`;
+            } else {
+                confidenceBadge.className = 'px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800';
+                confidenceBadge.textContent = `${confidence.toFixed(0)}% Confidence`;
+            }
+            
+            // Basic info
+            document.getElementById('merchantName').textContent = data.merchant || 'Unknown Merchant';
+            document.getElementById('receiptDate').textContent = data.date || '--';
+            document.getElementById('receiptTime').textContent = data.time || '--';
+            
+            // Items
+            if (data.items && data.items.length > 0) {
+                document.getElementById('itemsSection').classList.remove('hidden');
+                const itemsList = document.getElementById('itemsList');
+                itemsList.innerHTML = data.items.map(item => `
+                    <div class="flex justify-between items-center text-sm">
+                        <span class="text-gray-700">${item.name}</span>
+                        <span class="font-medium">${formatCurrency(item.price)}</span>
+                    </div>
+                `).join('');
+            } else {
+                document.getElementById('itemsSection').classList.add('hidden');
+            }
+            
+            // Amounts
+            document.getElementById('subtotal').textContent = formatCurrency(data.subtotal);
+            document.getElementById('tax').textContent = formatCurrency(data.tax);
+            document.getElementById('total').textContent = formatCurrency(data.total);
+            
+            // Additional info
+            if (data.phone || data.address) {
+                document.getElementById('additionalInfo').classList.remove('hidden');
+                document.getElementById('phone').textContent = `Phone: ${data.phone || '--'}`;
+                document.getElementById('address').textContent = `Address: ${data.address || '--'}`;
+            }
+            
+            // Raw text
+            if (data.raw_text) {
+                document.getElementById('rawText').textContent = data.raw_text;
+            }
+        }
+
+        // Display matched transaction
+        function displayMatch(match) {
+            document.getElementById('matchedCard').classList.remove('hidden');
+            document.getElementById('matchedDetails').textContent = 
+                `Matched to: ${match.description} on ${new Date(match.date).toLocaleDateString()} for ${formatCurrency(match.amount)}`;
+        }
+
+        // Match transaction
+        async function matchTransaction() {
+            if (!parsedData) return;
+            
+            // This would call an API to find matching transactions
+            showToast('Searching for matching transactions...', 'info');
+            
+            // For demo, just show a message
+            setTimeout(() => {
+                showToast('No matching transactions found', 'warning');
+            }, 1500);
+        }
+
+        // Save receipt
+        function saveReceipt() {
+            if (!parsedData) return;
+            
+            // This would save the receipt data
+            showToast('Receipt saved successfully!');
+        }
+
+        // Toggle raw text
+        function toggleRawText() {
+            const rawText = document.getElementById('rawText');
+            const toggle = document.getElementById('rawTextToggle');
+            
+            if (rawText.classList.contains('hidden')) {
+                rawText.classList.remove('hidden');
+                toggle.classList.add('rotate-180');
+            } else {
+                rawText.classList.add('hidden');
+                toggle.classList.remove('rotate-180');
+            }
+        }
+
+        // Update the generateSample function to properly handle the blob
+        async function generateSample(type) {
+            showToast(`Generating ${type} receipt...`);
+            
+            try {
+                const response = await fetch(`/api/generate-sample/?type=${type}`, {
+                    method: 'GET',
+                    headers: {
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    credentials: 'same-origin'
+                });
+                
+                if (response.ok) {
+                    const blob = await response.blob();
+                    
+                    // Create a proper File object with correct MIME type
+                    const file = new File([blob], `sample_${type}.png`, { 
+                        type: 'image/png',
+                        lastModified: Date.now()
+                    });
+                    
+                    // Set the global selectedFile
+                    selectedFile = file;
+                    
+                    // Create object URL for preview
+                    const objectUrl = URL.createObjectURL(blob);
+                    document.getElementById('previewImg').src = objectUrl;
+                    document.getElementById('uploadPrompt').classList.add('hidden');
+                    document.getElementById('imagePreview').classList.remove('hidden');
+                    
+                    // Enable parse button
+                    document.getElementById('parseButton').disabled = false;
+                    document.getElementById('parseButtonText').textContent = 'Parse Receipt';
+                    
+                    showToast('Sample receipt loaded! Click "Parse Receipt" to analyze.');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showToast('Failed to generate sample', 'error');
+            }
+        }
+    </script>
+</body>
+</html>
