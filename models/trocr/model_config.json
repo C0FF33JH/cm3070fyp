@@ -1,0 +1,32 @@
+{
+  "model_name": "TrOCR + Rules",
+  "trocr_model": "microsoft/trocr-base-printed",
+  "timestamp": "20250915_071303",
+  "dataset_path": "/content/drive/MyDrive/FYP 2025/model_eval/sroie_receipts",
+  "num_test_samples": 347,
+  "device": "cuda",
+  "patterns": {
+    "date": [
+      "\\b(\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4})\\b",
+      "\\b(\\d{4}[/-]\\d{1,2}[/-]\\d{1,2})\\b",
+      "\\b(\\d{1,2}\\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\\s+\\d{2,4})\\b",
+      "\\b(\\d{1,2}\\.\\d{1,2}\\.\\d{2,4})\\b"
+    ],
+    "total": [
+      "(?:total|amount|sum|grand total)[:\\s]*[\\$\\s]*(\\d+\\.?\\d*)",
+      "(?:total amount due|total due)[:\\s]*[\\$\\s]*(\\d+\\.?\\d*)",
+      "(?:^|\\s)total[:\\s]*(\\d+\\.?\\d*)",
+      "[\\$]\\s*(\\d+\\.?\\d*)\\s*(?:total|$)",
+      "(?:subtotal|sub total)[:\\s]*[\\$\\s]*(\\d+\\.?\\d*)"
+    ],
+    "company": [
+      "^([A-Z][A-Z\\s&\\-\\.]+?)(?:\\n|$)",
+      "(?:^|\\n)([A-Z][A-Za-z\\s&\\-\\.]{2,30})(?:\\n|$)"
+    ],
+    "address": [
+      "(\\d+[\\w\\s,\\-\\.]+(?:road|rd|street|st|avenue|ave|lane|drive|way|plaza|place)[\\w\\s,\\-\\.]*)",
+      "(?:no\\.?\\s*\\d+[,\\s]+[\\w\\s]+(?:road|rd|street|st|avenue|ave))",
+      "(\\d+\\s+[\\w\\s]+,\\s*[\\w\\s]+,?\\s*\\d{5,6})"
+    ]
+  }
+}
