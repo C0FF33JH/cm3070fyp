@@ -8,6 +8,38 @@ from dashboard.models import Transaction, Account, ChatMessage, AnalysisResult
 from dashboard.ml_services import get_categorization_service, get_forecasting_service, get_fraud_service
 import json
 
+@csrf_exempt
+@require_http_methods(["POST"])
+def parse_receipt(request):
+    """API endpoint for receipt parsing"""
+    from dashboard.ml_services.receipt_service import get_receipt_service
+    
+    # Check if image file was uploaded
+    if 'receipt' not in request.FILES:
+        return JsonResponse({'error': 'No receipt image provided'}, status=400)
+    
+    receipt_file = request.FILES['receipt']
+    
+    # Get user and account
+    user = User.objects.get(username='demo_user')
+    account = user.accounts.first()
+    
+    if not account:
+        return JsonResponse({'error': 'No account found'}, status=404)
+    
+    # Parse receipt
+    service = get_receipt_service()
+    result = service.process_receipt(receipt_file)
+    
+    if result['success']:
+        # Try to match to transaction
+        receipt_data = result['data']
+        if receipt_data.get('total'):
+            match = service.match_receipt_to_transaction(receipt_data, account.id)
+            result['matched_transaction'] = match
+    
+    return JsonResponse(result)
+
 def dashboard_view(request):
     """Main dashboard view"""
     # Default to demo_user for now (no login required)

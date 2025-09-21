@@ -15,6 +15,10 @@ from .fraud_service import (
     XGBoostFraudService,
     get_fraud_service
 )
+from .receipt_service import (
+    TrOCRReceiptService,
+    get_receipt_service
+)
 
 __all__ = [
     'SetFitCategorizationService',
@@ -23,4 +27,6 @@ __all__ = [
     'get_forecasting_service',
     'XGBoostFraudService',
     'get_fraud_service',
+    'TrOCRReceiptService',
+    'get_receipt_service',
 ]

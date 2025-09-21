@@ -17,4 +17,5 @@ urlpatterns = [
     path('chat/', views.chat_interface, name='chat'),
     path('api/chat/', views.process_chat, name='process_chat'),
     path('api/comprehensive/', views.comprehensive_analysis, name='comprehensive'),
+    path('api/parse-receipt/', views.parse_receipt, name='parse_receipt'),
 ]

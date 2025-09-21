@@ -40,3 +40,7 @@ media/
 # ignore data files
 data/
 models/
+
+
+#ignore test output (json and png files starting with sample_receipt
+sample_receipt*
