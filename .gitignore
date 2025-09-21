@@ -1,0 +1,38 @@
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Python cache files
+__pycache__/
+*.py[cod]
+
+# Django specific
+*.log
+*.pot
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+db.sqlite3
+
+# Environment variables
+.env
+
+# VS Code settings
+.vscode/
+
+# Django migrations
+# **/migrations/
+
+
+# OSMnx HTTP cache
+cache/
+# *.json
+
+# macOS Finder metadata
+.DS_Store
+
+
+# ignore all media
+media/
