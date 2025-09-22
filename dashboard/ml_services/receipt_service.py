@@ -92,28 +92,41 @@ class TrOCRReceiptService:
                 raise
         return self.easyocr_reader
     
-    def extract_text_from_image(self, image: Image.Image) -> str:
+    def extract_text_from_image(self, image: Image.Image, force_easyocr: bool = True) -> str:
         """
-        Extract text from image using TrOCR, fallback to EasyOCR if needed
+        Extract text from image - DEFAULT TO EASYOCR for better accuracy
+        
+        Args:
+            image: PIL Image to extract text from
+            force_easyocr: If True, skip TrOCR and use EasyOCR directly (default: True)
         """
-        # First, try TrOCR with improved preprocessing
+        # DEFAULT TO EASYOCR - it works better for our receipts
+        if force_easyocr:
+            logger.info("Using EasyOCR for text extraction (default mode)")
+            easyocr_text = self._try_easyocr_extraction(image)
+            
+            if self._is_valid_receipt_text(easyocr_text):
+                logger.info(f"EasyOCR extracted valid text: {len(easyocr_text)} characters")
+                return easyocr_text
+            else:
+                # Even if validation fails, return the text if we have something
+                if easyocr_text and len(easyocr_text) > 10:
+                    logger.info("Using EasyOCR result despite validation")
+                    return easyocr_text
+        
+        # Fallback to TrOCR only if explicitly requested or EasyOCR completely fails
+        logger.info("Attempting TrOCR extraction as fallback...")
         trocr_text = self._try_trocr_extraction(image)
         
         if self._is_valid_receipt_text(trocr_text):
             logger.info(f"TrOCR extracted valid text: {len(trocr_text)} characters")
             return trocr_text
         
-        # Fallback to EasyOCR
-        logger.info("TrOCR extraction inadequate, trying EasyOCR...")
-        easyocr_text = self._try_easyocr_extraction(image)
+        # If both have text, prefer EasyOCR (it's more reliable)
+        easyocr_text = self._try_easyocr_extraction(image) if not force_easyocr else ""
         
-        if self._is_valid_receipt_text(easyocr_text):
-            logger.info(f"EasyOCR extracted valid text: {len(easyocr_text)} characters")
-            return easyocr_text
-        
-        # Return the better of the two
         if len(easyocr_text) > len(trocr_text):
-            logger.info("Using EasyOCR result")
+            logger.info("Using EasyOCR result (better extraction)")
             return easyocr_text
         else:
             logger.info("Using TrOCR result")
@@ -278,12 +291,18 @@ class TrOCRReceiptService:
             return image
     
     def _is_valid_receipt_text(self, text: str) -> bool:
-        """Check if extracted text looks like valid receipt content"""
+        """Check if extracted text looks like valid receipt content - MORE STRICT"""
         if not text or len(text) < 20:
             return False
         
         # Check for nonsense patterns (repeated chars, only numbers, etc)
         if re.match(r'^[\*\s\d]+$', text):
+            return False
+        
+        # Check for gibberish patterns common in failed TrOCR
+        gibberish_patterns = ['WHOPEXOS', 'WHOPENOS', 'WWW WWW', 'KKK', 'INVOICE:', 'INVOICE ']
+        if any(pattern in text.upper() for pattern in gibberish_patterns):
+            logger.debug(f"Text contains gibberish patterns: {text[:100]}")
             return False
         
         # Check for excessive repeated characters (KKK... or WWW...)
@@ -301,8 +320,8 @@ class TrOCRReceiptService:
         # Also check for dollar amounts
         has_price = bool(re.search(r'\$?\d+\.\d{2}', text))
         
-        # Lower threshold since TrOCR is extracting partial text
-        return keyword_count >= 1 and has_price
+        # RAISED threshold - require at least 2 keywords for better validation
+        return keyword_count >= 2 and has_price
     
     def parse_receipt_text(self, text: str) -> Dict:
         """
@@ -470,7 +489,7 @@ class TrOCRReceiptService:
     
     def process_receipt(self, image_input, enhance: bool = True) -> Dict:
         """
-        Complete receipt processing pipeline
+        Complete receipt processing pipeline - DEFAULTS TO EASYOCR
         """
         try:
             # Handle different input types
@@ -487,8 +506,8 @@ class TrOCRReceiptService:
             if image.mode != 'RGB':
                 image = image.convert('RGB')
             
-            # Extract text
-            extracted_text = self.extract_text_from_image(image)
+            # Extract text - DEFAULT TO EASYOCR (force_easyocr=True by default)
+            extracted_text = self.extract_text_from_image(image, force_easyocr=True)
             
             # Parse structured data
             parsed_data = self.parse_receipt_text(extracted_text)
